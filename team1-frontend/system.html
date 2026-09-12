@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FlowSentinel - System & Hardware Diagnostics</title>
+  
+  <!-- CSS Stylesheets -->
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <div id="app-root">
+    <!-- Shared Sidebar Container -->
+    <div id="sidebar-container"></div>
+
+    <!-- Main Content Area -->
+    <div class="fs-main-wrapper">
+      <!-- Shared Header Container -->
+      <div id="header-container"></div>
+
+      <!-- Main System Viewport -->
+      <main class="fs-content">
+
+        <!-- 1. System Health & Diagnostic Action Bar -->
+        <section class="card" style="padding: 1rem 1.25rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+            <div>
+              <h3 style="font-size: 1.05rem; font-weight: 800; color: var(--fs-text-primary);">⚙️ Hardware Gateway & Multi-Sensor Bus Diagnostics</h3>
+              <p style="font-size: 0.75rem; color: var(--fs-text-secondary); margin-top: 0.15rem;">
+                Microcontroller bus links, I2C/SPI telemetry pipelines, baud rates, and hardware error audit logs.
+              </p>
+            </div>
+
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <button id="btn-run-diag" class="btn btn-primary">🔍 Run System Diagnostics</button>
+              <button id="btn-refresh-sys" class="btn btn-secondary">🔄 Refresh Status</button>
+              <button id="btn-clear-errors" class="btn btn-danger">🗑️ Clear Error Log</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- 2. System Overview KPI Cards -->
+        <section class="kpi-grid">
+          <div class="kpi-card normal">
+            <div class="kpi-label">Backend Engine</div>
+            <div id="sys-backend-val" class="kpi-value" style="font-size: 1.4rem; color: var(--fs-status-online);">HEALTHY</div>
+            <div class="kpi-subtext">FastAPI ASGI Server (Port 8000)</div>
+          </div>
+
+          <div class="kpi-card normal">
+            <div class="kpi-label">WebSocket Clients</div>
+            <div id="sys-ws-clients-val" class="kpi-value" style="font-size: 1.4rem;">1 Active</div>
+            <div class="kpi-subtext">Channel: /ws/telemetry</div>
+          </div>
+
+          <div class="kpi-card normal">
+            <div class="kpi-label">System Uptime</div>
+            <div id="sys-uptime-val" class="kpi-value" style="font-size: 1.4rem;">-- s</div>
+            <div class="kpi-subtext">Daemon Loop: Synchronous</div>
+          </div>
+
+          <div class="kpi-card normal">
+            <div class="kpi-label">Hardware Bus Status</div>
+            <div class="kpi-value" style="font-size: 1.4rem; color: var(--fs-status-normal);">OPTIMAL</div>
+            <div class="kpi-subtext">Packet Loss: <span style="font-weight: 700; color: var(--fs-status-normal);">0.00%</span></div>
+          </div>
+        </section>
+
+        <!-- 3. ESP32 Gateway Hardware Interface -->
+        <section class="card">
+          <div class="card-header">
+            <h3>🔌 Microcontroller Gateway (ESP32 IoT Node)</h3>
+            <div id="esp32-status-badge" class="badge online">
+              <span class="pulse-dot"></span>
+              <span id="esp32-status-text">CONNECTED</span>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr) auto; gap: 1.25rem; align-items: center;">
+            <div>
+              <div style="font-size: 0.72rem; color: var(--fs-text-muted); font-weight: 700; text-transform: uppercase;">Serial Port</div>
+              <div id="esp32-port-val" style="font-size: 0.95rem; font-weight: 700; font-family: var(--fs-font-mono); color: var(--fs-accent-cyan);">COM4 (USB Serial)</div>
+            </div>
+
+            <div>
+              <div style="font-size: 0.72rem; color: var(--fs-text-muted); font-weight: 700; text-transform: uppercase;">Baud Rate</div>
+              <div style="font-size: 0.95rem; font-weight: 700; font-family: var(--fs-font-mono);">115200 bps</div>
+            </div>
+
+            <div>
+              <div style="font-size: 0.72rem; color: var(--fs-text-muted); font-weight: 700; text-transform: uppercase;">Last Received Packet</div>
+              <div id="esp32-last-packet" style="font-size: 0.95rem; font-weight: 700; font-family: var(--fs-font-mono);">Just now</div>
+            </div>
+
+            <div>
+              <div style="font-size: 0.72rem; color: var(--fs-text-muted); font-weight: 700; text-transform: uppercase;">Streaming Rate</div>
+              <div style="font-size: 0.95rem; font-weight: 700; font-family: var(--fs-font-mono);">2.0 Hz (500 ms)</div>
+            </div>
+
+            <div style="display: flex; gap: 0.5rem;">
+              <button id="btn-scan-ports" class="btn btn-secondary">Scan Ports</button>
+              <button id="btn-esp32-toggle" class="btn btn-danger">Disconnect</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- 4. Sensor Health Cards (4 Physical Sensors) -->
+        <section class="sensor-grid">
+          <div class="sensor-card">
+            <div class="sensor-card-header">
+              <span class="sensor-title">📐 HC-SR04 Ultrasonic</span>
+              <span class="badge online">ONLINE</span>
+            </div>
+            <div class="sensor-value-group">
+              <span class="sensor-value">100%</span>
+              <span class="sensor-unit">Health (SNR 42dB)</span>
+            </div>
+            <div class="sensor-meta-row">
+              <span>Last: 52.0 cm</span>
+              <span>Bus: GPIO 18/19</span>
+            </div>
+          </div>
+
+          <div class="sensor-card">
+            <div class="sensor-card-header">
+              <span class="sensor-title">⚖️ HX711 Load Cell</span>
+              <span class="badge online">ONLINE</span>
+            </div>
+            <div class="sensor-value-group">
+              <span class="sensor-value">99.8%</span>
+              <span class="sensor-unit">Health (24-bit ADC)</span>
+            </div>
+            <div class="sensor-meta-row">
+              <span>Last: 320 kg</span>
+              <span>Bus: DT/SCK</span>
+            </div>
+          </div>
+
+          <div class="sensor-card">
+            <div class="sensor-card-header">
+              <span class="sensor-title">📳 MPU6050 Accelerometer</span>
+              <span class="badge online">ONLINE</span>
+            </div>
+            <div class="sensor-value-group">
+              <span class="sensor-value">100%</span>
+              <span class="sensor-unit">Health (I2C OK)</span>
+            </div>
+            <div class="sensor-meta-row">
+              <span>Last: 3.40 G</span>
+              <span>Bus: I2C 0x68</span>
+            </div>
+          </div>
+
+          <div class="sensor-card">
+            <div class="sensor-card-header">
+              <span class="sensor-title">⚡ ACS712 Current Sensor</span>
+              <span class="badge online">ONLINE</span>
+            </div>
+            <div class="sensor-value-group">
+              <span class="sensor-value">98.5%</span>
+              <span class="sensor-unit">Health (Hall OK)</span>
+            </div>
+            <div class="sensor-meta-row">
+              <span>Last: 42.5 A</span>
+              <span>Bus: ADC1_CH0</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- 5. System Logs Viewer Console -->
+        <section class="card">
+          <div class="card-header">
+            <h3>📜 System & Hardware Diagnostics Log Console</h3>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+              <span style="font-size: 0.72rem; color: var(--fs-text-muted); font-weight: 700;">FILTER:</span>
+              <button class="btn btn-secondary log-filter-btn active" data-filter="all" style="padding: 2px 8px; font-size: 0.72rem;">ALL</button>
+              <button class="btn btn-secondary log-filter-btn" data-filter="info" style="padding: 2px 8px; font-size: 0.72rem;">INFO</button>
+              <button class="btn btn-secondary log-filter-btn" data-filter="warn" style="padding: 2px 8px; font-size: 0.72rem;">WARN</button>
+              <button class="btn btn-secondary log-filter-btn" data-filter="err" style="padding: 2px 8px; font-size: 0.72rem;">ERROR</button>
+            </div>
+          </div>
+
+          <div id="system-log-console" class="fs-console">
+            <div class="fs-console-line" data-sev="info">
+              <span class="fs-console-time">[12:00:00]</span>
+              <span class="fs-console-comp">[FASTAPI]</span>
+              <span class="fs-console-ok">FlowSentinel Backend Engine listening on http://0.0.0.0:8000</span>
+            </div>
+            <div class="fs-console-line" data-sev="info">
+              <span class="fs-console-time">[12:00:01]</span>
+              <span class="fs-console-comp">[CHUTE_PREDICTOR]</span>
+              <span class="fs-console-info">Scikit-Learn Random Forest & Isolation Forest weights verified.</span>
+            </div>
+            <div class="fs-console-line" data-sev="info">
+              <span class="fs-console-time">[12:00:02]</span>
+              <span class="fs-console-comp">[WS_HUB]</span>
+              <span class="fs-console-ok">WebSocket Hub connection established. Ready for live telemetry streaming.</span>
+            </div>
+            <div class="fs-console-line" data-sev="info">
+              <span class="fs-console-time">[12:00:03]</span>
+              <span class="fs-console-comp">[ESP32_GATEWAY]</span>
+              <span class="fs-console-ok">Serial communication initialized on COM4 @ 115200 baud.</span>
+            </div>
+            <div class="fs-console-line" data-sev="warn">
+              <span class="fs-console-time">[12:05:22]</span>
+              <span class="fs-console-comp">[ALERT_DISPATCHER]</span>
+              <span class="fs-console-warn">Transient load surge evaluated. State debounced within nominal hysteresis window.</span>
+            </div>
+          </div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- Shared & Page Scripts -->
+  <script src="js/navigation.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/system.js"></script>
+</body>
+</html>

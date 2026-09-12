@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FlowSentinel - Training Center</title>
+  
+  <!-- CSS Stylesheets -->
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <div id="app-root">
+    <!-- Shared Sidebar Container -->
+    <div id="sidebar-container"></div>
+
+    <!-- Main Content Area -->
+    <div class="fs-main-wrapper">
+      <!-- Shared Header Container -->
+      <div id="header-container"></div>
+
+      <!-- Main Training Viewport -->
+      <main class="fs-content">
+
+        <!-- 1. Top Section: Model Status & Operational Health -->
+        <section class="card">
+          <div class="card-header">
+            <h3>🧠 Machine Learning Model Status</h3>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+              <button id="btn-refresh-model-info" class="btn btn-secondary btn-icon" title="Refresh Model Info">🔄</button>
+              <span id="model-health-badge" class="badge online">STATUS: READY</span>
+            </div>
+          </div>
+
+          <div class="kpi-grid">
+            <div class="kpi-card normal">
+              <div class="kpi-label">Active Classifier</div>
+              <div id="model-name-val" class="kpi-value" style="font-size: 1.4rem;">Random Forest</div>
+              <div class="kpi-subtext">Architecture: 100 Trees (3-Class)</div>
+            </div>
+
+            <div class="kpi-card normal">
+              <div class="kpi-label">Model Version</div>
+              <div id="model-version-val" class="kpi-value" style="font-size: 1.4rem;">v1.0.0</div>
+              <div class="kpi-subtext">Backend: Scikit-Learn In-Memory</div>
+            </div>
+
+            <div class="kpi-card normal">
+              <div class="kpi-label">Training Source</div>
+              <div id="model-source-val" class="kpi-value" style="font-size: 1.4rem;">Physics Synthetic</div>
+              <div class="kpi-subtext">OOD Distribution: Isolation Forest</div>
+            </div>
+
+            <div class="kpi-card normal">
+              <div class="kpi-label">Dataset Size</div>
+              <div id="model-dataset-val" class="kpi-value" style="font-size: 1.4rem;">20,000 Records</div>
+              <div class="kpi-subtext">Last Trained: <span id="model-last-train">System Startup</span></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 2. Dual Column: Data Recording Console (Left) vs Training Actions (Right) -->
+        <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 1.25rem;">
+          
+          <!-- Data Recording Console -->
+          <section class="card">
+            <div class="card-header">
+              <h3>📹 Data Recording & Ground-Truth Labeling</h3>
+              <span id="rec-status-indicator" class="badge" style="display: none;">● RECORDING</span>
+            </div>
+
+            <!-- Active Recording Status Bar -->
+            <div id="rec-active-banner" style="display: none; background: rgba(239, 68, 68, 0.12); border: 1px solid var(--fs-status-critical); border-radius: var(--fs-radius-sm); padding: 0.85rem; margin-bottom: 0.5rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--fs-status-critical); font-weight: 700; font-size: 0.85rem;">
+                  <span class="pulse-dot" style="background-color: var(--fs-status-critical);"></span>
+                  LIVE TELEMETRY INGESTION ACTIVE
+                </div>
+                <div style="font-family: var(--fs-font-mono); font-size: 0.85rem; color: var(--fs-text-primary);">
+                  Elapsed: <span id="rec-timer">00:00</span> | Samples: <span id="rec-sample-count">0</span>
+                </div>
+              </div>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 0.85rem;">
+              <div class="control-group">
+                <div class="control-label-row">
+                  <span>Session Identifier</span>
+                </div>
+                <input type="text" id="rec-session-name" value="SESSION_BLAST_FURNACE_01" style="background: var(--fs-bg-input); border: 1px solid var(--fs-border-medium); padding: 0.6rem 0.8rem; border-radius: var(--fs-radius-sm); color: var(--fs-text-primary); font-family: var(--fs-font-mono); font-size: 0.85rem;">
+              </div>
+
+              <div class="control-group">
+                <div class="control-label-row">
+                  <span>Ground-Truth Condition Label</span>
+                </div>
+                <select id="rec-condition-label" style="background: var(--fs-bg-input); border: 1px solid var(--fs-border-medium); padding: 0.6rem 0.8rem; border-radius: var(--fs-radius-sm); color: var(--fs-text-primary); font-size: 0.85rem;">
+                  <option value="0">Normal Dynamic Flow (State 0)</option>
+                  <option value="1">Partial Buildup Warning (State 1)</option>
+                  <option value="2">Critical Chute Choke / Blockage (State 2)</option>
+                  <option value="3">Sensor Anomaly / Resonance</option>
+                </select>
+              </div>
+
+              <div class="control-group">
+                <div class="control-label-row">
+                  <span>Active Sensor Telemetry Channels</span>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem; font-size: 0.8rem; color: var(--fs-text-secondary);">
+                  <label style="display: flex; align-items: center; gap: 0.4rem;">
+                    <input type="checkbox" checked disabled> Ultrasonic Clearance ($d$)
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 0.4rem;">
+                    <input type="checkbox" checked disabled> Load Cell Mass ($W$)
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 0.4rem;">
+                    <input type="checkbox" checked disabled> MPU6050 Vibration ($G$)
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 0.4rem;">
+                    <input type="checkbox" checked disabled> Motor Current ($A$)
+                  </label>
+                </div>
+              </div>
+
+              <!-- Action Controls -->
+              <div style="display: flex; gap: 0.6rem; margin-top: 0.5rem; flex-wrap: wrap;">
+                <button id="btn-start-rec" class="btn btn-primary">🔴 Start Recording</button>
+                <button id="btn-stop-rec" class="btn btn-secondary" disabled>⏹️ Stop Recording</button>
+                <button id="btn-discard-rec" class="btn btn-danger" disabled>🗑️ Discard Session</button>
+                <button id="btn-save-dataset" class="btn btn-success" disabled>💾 Save Dataset</button>
+              </div>
+            </div>
+          </section>
+
+          <!-- Training & Model Management Actions -->
+          <section class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+              <div class="card-header">
+                <h3>⚡ ML Training Pipelines</h3>
+                <span class="badge" style="font-size: 0.7rem;">In-Memory Model Export</span>
+              </div>
+
+              <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.75rem;">
+                <p style="font-size: 0.8rem; color: var(--fs-text-secondary); line-height: 1.4;">
+                  Trigger sub-second training pipelines. The backend trains models using physics distributions, performs StandardScaler serialization, and reloads weights directly into RAM.
+                </p>
+
+                <div style="display: flex; flex-direction: column; gap: 0.6rem;">
+                  <button id="btn-train-rf" class="btn btn-secondary" style="justify-content: space-between;">
+                    <span>🌲 Train Random Forest Classifier</span>
+                    <span class="badge" style="font-size: 0.65rem;">10,000 Samples</span>
+                  </button>
+
+                  <button id="btn-train-if" class="btn btn-secondary" style="justify-content: space-between;">
+                    <span>⚡ Train Isolation Forest Anomaly Engine</span>
+                    <span class="badge" style="font-size: 0.65rem;">5,000 Baseline</span>
+                  </button>
+
+                  <button id="btn-train-complete" class="btn btn-primary" style="justify-content: space-between; font-weight: 700; padding: 0.75rem 1rem;">
+                    <span>🚀 Train Complete Dual-Stage Pipeline</span>
+                    <span class="badge normal" style="font-size: 0.65rem;">Recommended</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Model Artifact Switcher -->
+            <div style="border-top: 1px solid var(--fs-border-subtle); padding-top: 0.85rem; margin-top: 1rem;">
+              <div style="font-size: 0.75rem; font-weight: 700; color: var(--fs-text-muted); text-transform: uppercase; margin-bottom: 0.5rem;">
+                Model Artifact Management
+              </div>
+              <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                <button id="btn-load-synthetic" class="btn btn-secondary" style="font-size: 0.75rem;">Load Synthetic Weights</button>
+                <button id="btn-load-real" class="btn btn-secondary" style="font-size: 0.75rem;">Load Real-Data Weights</button>
+                <button id="btn-refresh-models" class="btn btn-ghost" style="font-size: 0.75rem;">Refresh Memory</button>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <!-- 3. Training Sessions & Retrain Audit History Table -->
+        <section class="card">
+          <div class="card-header">
+            <h3>📜 Model Training & Dataset Audit History</h3>
+            <span class="badge" style="font-size: 0.7rem;">Persistent Model Artifacts</span>
+          </div>
+
+          <div style="overflow-x: auto;">
+            <table class="fs-table" id="training-history-table">
+              <thead>
+                <tr>
+                  <th>Training Timestamp</th>
+                  <th>Model Architecture</th>
+                  <th>Version</th>
+                  <th>Dataset Type</th>
+                  <th>Sample Count</th>
+                  <th>Validation Accuracy</th>
+                  <th>Inference Latency</th>
+                  <th>Deployment Status</th>
+                </tr>
+              </thead>
+              <tbody id="training-history-body">
+                <tr>
+                  <td class="mono">2026-09-12 12:00:00</td>
+                  <td>Random Forest + Isolation Forest</td>
+                  <td class="mono">v1.0.0</td>
+                  <td>Physics Synthetic Core</td>
+                  <td class="mono">20,000</td>
+                  <td style="color: var(--fs-status-normal); font-weight: 700;">98.4%</td>
+                  <td class="mono">12.4 ms</td>
+                  <td><span class="badge normal">ACTIVE DEPLOYMENT</span></td>
+                </tr>
+                <tr>
+                  <td class="mono">2026-09-12 09:30:15</td>
+                  <td>Isolation Forest Anomaly Baseline</td>
+                  <td class="mono">v0.9.4</td>
+                  <td>Baseline Healthy Telemetry</td>
+                  <td class="mono">10,000</td>
+                  <td style="color: var(--fs-status-normal); font-weight: 700;">97.8%</td>
+                  <td class="mono">8.2 ms</td>
+                  <td><span class="badge">ARCHIVED</span></td>
+                </tr>
+                <tr>
+                  <td class="mono">2026-09-11 18:45:00</td>
+                  <td>Initial Prototype Classifier</td>
+                  <td class="mono">v0.9.0</td>
+                  <td>Laboratory Test Rig</td>
+                  <td class="mono">5,000</td>
+                  <td style="color: var(--fs-status-warning); font-weight: 700;">94.2%</td>
+                  <td class="mono">15.1 ms</td>
+                  <td><span class="badge">ARCHIVED</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- Shared & Page Scripts -->
+  <script src="js/navigation.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/training.js"></script>
+</body>
+</html>

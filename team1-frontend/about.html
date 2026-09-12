@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FlowSentinel - About the System</title>
+  
+  <!-- CSS Stylesheets -->
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <div id="app-root">
+    <!-- Shared Sidebar Container -->
+    <div id="sidebar-container"></div>
+
+    <!-- Main Content Area -->
+    <div class="fs-main-wrapper">
+      <!-- Shared Header Container -->
+      <div id="header-container"></div>
+
+      <!-- Main About Viewport -->
+      <main class="fs-content">
+
+        <!-- 1. Hero Overview -->
+        <section class="hero-banner">
+          <div class="hero-content">
+            <h2>FlowSentinel</h2>
+            <p>Predictive Chute Blockage Management • AI-powered intelligent transfer chute monitoring and early-warning detection platform engineered for high-throughput heavy industrial manufacturing plants.</p>
+          </div>
+        </section>
+
+        <!-- 2. The Operational Problem vs Solution -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem;">
+          
+          <!-- The Problem -->
+          <section class="card">
+            <div class="card-header">
+              <h3>🚨 The Industrial Problem</h3>
+              <span class="badge critical">HIGH-RISK HAZARD</span>
+            </div>
+
+            <p style="font-size: 0.82rem; color: var(--fs-text-secondary); line-height: 1.5;">
+              In steel manufacturing facilities, raw bulk materials (iron ore, sinter, limestone) are transported across high-stress conveyor drop points. Sluggish flow and moisture cause sudden severe chute choke blockages:
+            </p>
+
+            <div class="flow-diagram">
+              <div class="flow-node">Chute Blockage</div>
+              <div class="flow-arrow">➔</div>
+              <div class="flow-node">Flow Interruption</div>
+              <div class="flow-arrow">➔</div>
+              <div class="flow-node">Conveyor Burnout</div>
+              <div class="flow-arrow">➔</div>
+              <div class="flow-node" style="border-color: var(--fs-status-critical); color: var(--fs-status-critical);">$15k/hr Downtime</div>
+            </div>
+          </section>
+
+          <!-- The Solution -->
+          <section class="card">
+            <div class="card-header">
+              <h3>💡 The FlowSentinel Solution</h3>
+              <span class="badge normal">PREDICTIVE AI</span>
+            </div>
+
+            <p style="font-size: 0.82rem; color: var(--fs-text-secondary); line-height: 1.5;">
+              FlowSentinel fuses multi-sensor physical telemetry with sub-15ms dual-stage machine learning to identify flow restriction and chute buildup minutes before catastrophic choke failure occurs:
+            </p>
+
+            <div class="flow-diagram">
+              <div class="flow-node highlight">Multi-Sensors</div>
+              <div class="flow-arrow">➔</div>
+              <div class="flow-node highlight">Feature Scaling</div>
+              <div class="flow-arrow">➔</div>
+              <div class="flow-node highlight">Dual AI Fusion</div>
+              <div class="flow-arrow">➔</div>
+              <div class="flow-node highlight" style="border-color: var(--fs-status-normal); color: var(--fs-status-normal);">Early Alert Action</div>
+            </div>
+          </section>
+        </div>
+
+        <!-- 3. Full System Engineering Architecture Flow -->
+        <section class="card">
+          <div class="card-header">
+            <h3>🏗️ End-to-End System Pipeline Architecture</h3>
+            <span class="badge" style="font-size: 0.7rem;">HARDWARE TO SCADA DASHBOARD</span>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 1rem; margin-top: 0.5rem;">
+            <div class="flow-diagram" style="padding: 0.5rem 0;">
+              <div class="flow-node">
+                <div style="font-size: 1.1rem; margin-bottom: 0.2rem;">📡</div>
+                <div>IoT Sensor Suite</div>
+                <div style="font-size: 0.65rem; color: var(--fs-text-muted); font-weight: 500;">Ultrasonic, Load Cell, Vibration, Current</div>
+              </div>
+              <div class="flow-arrow">➔</div>
+              <div class="flow-node">
+                <div style="font-size: 1.1rem; margin-bottom: 0.2rem;">🔌</div>
+                <div>ESP32 Node</div>
+                <div style="font-size: 0.65rem; color: var(--fs-text-muted); font-weight: 500;">2Hz Serial Sampling & Ingestion</div>
+              </div>
+              <div class="flow-arrow">➔</div>
+              <div class="flow-node highlight">
+                <div style="font-size: 1.1rem; margin-bottom: 0.2rem;">⚡</div>
+                <div>FastAPI WS Hub</div>
+                <div style="font-size: 0.65rem; color: var(--fs-text-muted); font-weight: 500;">Async Real-Time Broadcast</div>
+              </div>
+              <div class="flow-arrow">➔</div>
+              <div class="flow-node highlight">
+                <div style="font-size: 1.1rem; margin-bottom: 0.2rem;">🧠</div>
+                <div>Dual AI Models</div>
+                <div style="font-size: 0.65rem; color: var(--fs-text-muted); font-weight: 500;">Random Forest + Isolation Forest</div>
+              </div>
+              <div class="flow-arrow">➔</div>
+              <div class="flow-node highlight">
+                <div style="font-size: 1.1rem; margin-bottom: 0.2rem;">🛡️</div>
+                <div>Debounced Alerts</div>
+                <div style="font-size: 0.65rem; color: var(--fs-text-muted); font-weight: 500;">1.5s Hysteresis Window</div>
+              </div>
+              <div class="flow-arrow">➔</div>
+              <div class="flow-node">
+                <div style="font-size: 1.1rem; margin-bottom: 0.2rem;">🖥️</div>
+                <div>SCADA Dashboard</div>
+                <div style="font-size: 0.65rem; color: var(--fs-text-muted); font-weight: 500;">Real-Time Control & Digital Twin</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 4. Verified Technology Stack & Industrial Disclaimer -->
+        <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 1.25rem;">
+          
+          <section class="card">
+            <div class="card-header">
+              <h3>🛠️ Core Technology Stack</h3>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem; font-size: 0.8rem;">
+              <div style="background: var(--fs-bg-input); padding: 0.75rem; border-radius: var(--fs-radius-sm); border-left: 3px solid var(--fs-accent-cyan);">
+                <div style="font-weight: 700; color: var(--fs-text-primary);">FastAPI + Uvicorn</div>
+                <div style="font-size: 0.72rem; color: var(--fs-text-secondary); margin-top: 0.2rem;">Async REST API & WebSocket Real-Time Broadcasting Engine</div>
+              </div>
+              <div style="background: var(--fs-bg-input); padding: 0.75rem; border-radius: var(--fs-radius-sm); border-left: 3px solid #f59e0b);">
+                <div style="font-weight: 700; color: var(--fs-text-primary);">Scikit-Learn ML</div>
+                <div style="font-size: 0.72rem; color: var(--fs-text-secondary); margin-top: 0.2rem;">Random Forest Classifier & Isolation Forest Outlier Detector</div>
+              </div>
+              <div style="background: var(--fs-bg-input); padding: 0.75rem; border-radius: var(--fs-radius-sm); border-left: 3px solid #10b981);">
+                <div style="font-weight: 700; color: var(--fs-text-primary);">HTML5, CSS3 & ES6+</div>
+                <div style="font-size: 0.72rem; color: var(--fs-text-secondary); margin-top: 0.2rem;">Zero-framework SCADA frontend with Web Audio API synthesizer</div>
+              </div>
+              <div style="background: var(--fs-bg-input); padding: 0.75rem; border-radius: var(--fs-radius-sm); border-left: 3px solid #a855f7);">
+                <div style="font-weight: 700; color: var(--fs-text-primary);">Chart.js Real-Time</div>
+                <div style="font-size: 0.72rem; color: var(--fs-text-secondary); margin-top: 0.2rem;">High-density multi-axis streaming time-series & telemetry curves</div>
+              </div>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="card-header">
+              <h3>⚠️ Operational Safety & Disclaimer</h3>
+            </div>
+            <div style="font-size: 0.8rem; color: var(--fs-text-secondary); line-height: 1.5;">
+              <p>
+                <strong>FlowSentinel</strong> is designed as a primary decision-support and predictive early-warning advisory system. 
+              </p>
+              <p style="margin-top: 0.4rem;">
+                Emergency hardware interlocks, pull-cord trip switches, and physical belt tear sensors must remain independent and operational in compliance with industrial plant machinery safety standards.
+              </p>
+              <div style="margin-top: 0.75rem; font-size: 0.72rem; color: var(--fs-text-muted);">
+                Smart India Hackathon 2024 • Heavy Industry Predictive Maintenance Solutions
+              </div>
+            </div>
+          </section>
+
+        </div>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- Shared & Page Scripts -->
+  <script src="js/navigation.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/about.js"></script>
+</body>
+</html>
