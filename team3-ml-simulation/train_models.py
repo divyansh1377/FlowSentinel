@@ -14,7 +14,7 @@ import json
 import joblib
 import numpy as np
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timezone
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestClassifier, IsolationForest
@@ -34,28 +34,28 @@ FEATURE_COLUMNS = [
     "material_flow_rate_tph"
 ]
 
-def train_and_export_models(n_samples: int = 20000):
-    print("🚀 [Team 3 ML] Starting Synthetic Physics Dataset Generation...")
+def train_and_export_models(n_samples: int = 20000, contamination: float = 0.04):
+    print("🚀 [Team 3 ML] Starting Synthetic Physics Dataset Generation (with continuous Markov walk)...")
     generator = ChutePhysicsGenerator(seed=42)
-    df = generator.generate_dataset(n_samples=n_samples)
+    df = generator.generate_dataset(n_samples=n_samples, use_markov=True)
     
     X = df[FEATURE_COLUMNS].values
     y_class = df["state_label"].values
     is_anomaly = df["is_anomaly"].values
 
     # Step 1: Train Isolation Forest on strictly Normal flow data
-    print("🧠 [Team 3 ML] Training Isolation Forest for Unsupervised Anomaly Detection...")
+    print(f"🧠 [Team 3 ML] Training Isolation Forest for Unsupervised Anomaly Detection (Contamination={contamination})...")
     normal_indices = (df["state_label"] == 0) & (df["is_anomaly"] == 0)
     X_normal = X[normal_indices]
 
     scaler = StandardScaler()
     X_scaled_normal = scaler.fit_transform(X_normal)
 
-    # Train Isolation Forest with 5% expected contamination
+    # Train Isolation Forest with configurable contamination baseline
     isolation_forest = IsolationForest(
         n_estimators=150,
         max_samples="auto",
-        contamination=0.04,
+        contamination=contamination,
         random_state=42,
         n_jobs=-1
     )
@@ -112,9 +112,10 @@ def train_and_export_models(n_samples: int = 20000):
 
     metadata = {
         "version": "1.0.0",
-        "trained_at": datetime.utcnow().isoformat(),
+        "trained_at": datetime.now(timezone.utc).isoformat(),
         "n_samples": n_samples,
         "features": FEATURE_COLUMNS,
+        "anomaly_contamination": contamination,
         "metrics": {
             "accuracy": round(float(acc), 4),
             "f1_score": round(float(f1), 4),

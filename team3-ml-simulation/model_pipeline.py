@@ -12,7 +12,7 @@ import time
 import json
 import joblib
 import numpy as np
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
 
 FEATURE_COLUMNS = [
     "distance_cm",
@@ -63,6 +63,13 @@ class ChutePredictor:
                 self.rf_model = joblib.load(rf_path)
                 self.if_model = joblib.load(if_path)
                 self.scaler = joblib.load(scaler_path)
+                
+                # Configure single-threaded inference for minimum per-sample latency (<15ms)
+                if hasattr(self.rf_model, "n_jobs"):
+                    self.rf_model.n_jobs = 1
+                if hasattr(self.if_model, "n_jobs"):
+                    self.if_model.n_jobs = 1
+
                 if os.path.exists(meta_path):
                     with open(meta_path, "r") as f:
                         self.metadata = json.load(f)
@@ -88,7 +95,18 @@ class ChutePredictor:
         distance = float(telemetry.get("distance_cm", 50.0))
         weight = float(telemetry.get("weight_kg", 300.0))
         vibration = float(telemetry.get("vibration_g", 3.0))
-        flow_rate = float(telemetry.get("material_flow_rate_tph", 200.0))
+
+        # Infer material flow rate if not explicitly supplied
+        if "material_flow_rate_tph" in telemetry:
+            flow_rate = float(telemetry["material_flow_rate_tph"])
+        else:
+            # Physical coupling: flow rate is correlated with clearance and kinetic vibration
+            if distance < 12.0 and vibration < 0.5:
+                flow_rate = 0.0
+            elif distance < 30.0:
+                flow_rate = 100.0
+            else:
+                flow_rate = 220.0
 
         features = np.array([[distance, weight, vibration, flow_rate]])
 
@@ -96,9 +114,9 @@ class ChutePredictor:
             # Scaled features
             features_scaled = self.scaler.transform(features)
 
-            # Random Forest Inference
-            class_pred = int(self.rf_model.predict(features_scaled)[0])
+            # Random Forest Inference - single-pass probability calculation
             probabilities = self.rf_model.predict_proba(features_scaled)[0]
+            class_pred = int(np.argmax(probabilities))
             prob_dict = {
                 "normal": round(float(probabilities[0]), 4),
                 "warning": round(float(probabilities[1]) if len(probabilities) > 1 else 0.0, 4),
@@ -106,11 +124,11 @@ class ChutePredictor:
             }
             confidence = round(float(np.max(probabilities)), 4)
 
-            # Isolation Forest Anomaly Detection
-            # -1 = anomaly, 1 = normal in scikit-learn
-            if_pred = int(self.if_model.predict(features_scaled)[0])
-            is_anomaly = True if if_pred == -1 else False
+            # Isolation Forest Anomaly Detection (using score_samples directly)
             raw_score = float(self.if_model.score_samples(features_scaled)[0])
+            # In IsolationForest, offset_ is the decision threshold for score_samples
+            offset = getattr(self.if_model, "offset_", -0.5)
+            is_anomaly = bool(raw_score < offset)
             # Normalize raw_score to 0.0-1.0 anomaly index (higher = more anomalous)
             anomaly_score = round(float(np.clip(-raw_score, 0.0, 1.0)), 4)
 
