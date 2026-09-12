@@ -74,6 +74,13 @@ class ChutePredictor:
                 self.rf_model = joblib.load(rf_path)
                 self.if_model = joblib.load(if_path)
                 self.scaler = joblib.load(scaler_path)
+
+                # Ensure n_jobs=1 for zero joblib threading overhead on single-sample inference
+                if self.rf_model:
+                    self.rf_model.n_jobs = 1
+                if self.if_model:
+                    self.if_model.n_jobs = 1
+
                 if self.scaler:
                     self._mean = self.scaler.mean_
                     self._scale_inv = 1.0 / self.scaler.scale_
@@ -276,18 +283,18 @@ class ChutePredictor:
 
         # 2. Confirmed Physical Blockage
         elif status_code == 2:
-            if dist < 15.0 and vib < 0.40:
-                cat = "CRITICAL_FUNNEL_CHOKE"
-                sev = "CRITICAL"
-                evidence = f"Full bed accumulation ({dist:.1f} cm clearance) with near-zero vibration ({vib:.2f} G) and heavy mass ({weight:.1f} kg)."
-                action = "IMMEDIATE EMERGENCY STOP of upstream feeder belt. Trigger high-pressure pneumatic air cannons."
-                summary = "Critical material choke: Bed accumulation reached maximum fill with dead mechanical vibration."
-            elif dw_dt > 50.0:
+            if dw_dt > 50.0:
                 cat = "RAPID_SURGE_JAM"
                 sev = "CRITICAL"
                 evidence = f"Rapid mass accumulation rate (+{dw_dt:.1f} kg/s) leading to instant throat choke."
                 action = "Trip conveyor interlock; activate discharge vibrator motors to disperse jam."
                 summary = "Rapid material surge jam formed in transfer chute."
+            elif dist < 15.0 and vib < 0.40:
+                cat = "CRITICAL_FUNNEL_CHOKE"
+                sev = "CRITICAL"
+                evidence = f"Full bed accumulation ({dist:.1f} cm clearance) with near-zero vibration ({vib:.2f} G) and heavy mass ({weight:.1f} kg)."
+                action = "IMMEDIATE EMERGENCY STOP of upstream feeder belt. Trigger high-pressure pneumatic air cannons."
+                summary = "Critical material choke: Bed accumulation reached maximum fill with dead mechanical vibration."
             else:
                 cat = "OVERBURDEN_FLOW_STOPPAGE"
                 sev = "CRITICAL"

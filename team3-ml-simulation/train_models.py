@@ -51,13 +51,13 @@ def train_and_export_models(n_samples: int = 20000):
     scaler = StandardScaler()
     X_scaled_normal = scaler.fit_transform(X_normal)
 
-    # Train Isolation Forest with 20 estimators for sub-15ms inference
+    # Train Isolation Forest with 20 estimators and n_jobs=1
     isolation_forest = IsolationForest(
         n_estimators=20,
         max_samples=256,
         contamination=0.04,
         random_state=42,
-        n_jobs=-1
+        n_jobs=1
     )
     isolation_forest.fit(X_scaled_normal)
 
@@ -81,7 +81,7 @@ def train_and_export_models(n_samples: int = 20000):
         min_samples_leaf=2,
         class_weight="balanced",
         random_state=42,
-        n_jobs=-1
+        n_jobs=1
     )
     random_forest.fit(X_train_scaled, y_train)
 
