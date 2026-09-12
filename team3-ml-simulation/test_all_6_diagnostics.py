@@ -107,3 +107,4 @@ def run_6_diagnostics_validation():
 
 if __name__ == "__main__":
     run_6_diagnostics_validation()
+
