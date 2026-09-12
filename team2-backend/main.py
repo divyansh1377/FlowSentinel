@@ -9,7 +9,7 @@ import sys
 import os
 import time
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 from typing import Dict, Any, List
 
@@ -214,14 +214,14 @@ async def websocket_telemetry_endpoint(websocket: WebSocket):
                 if msg_type == "SIMULATION_UPDATE":
                     # Manual slider movement from frontend
                     prediction = predictor.predict(payload)
-                    prediction["timestamp"] = datetime.utcnow().isoformat()
+                    prediction["timestamp"] = datetime.now(timezone.utc).isoformat()
                     prediction["chute_id"] = payload.get("chute_id", "CHUTE_BLAST_FURNACE_01")
 
-                    # Check alerts
-                    await alert_dispatcher.evaluate_prediction(prediction, prediction["chute_id"])
-
-                    # Broadcast result to all connected dashboards
+                    # Broadcast telemetry prediction to all connected dashboards
                     await ws_hub.broadcast_json("TELEMETRY_PREDICTION", prediction)
+
+                    # Check alerts (dispatches CRITICAL_ALERT if threshold breached)
+                    await alert_dispatcher.evaluate_prediction(prediction, prediction["chute_id"])
 
                 elif msg_type == "SET_SIMULATION_MODE":
                     # Switch between manual sliders and auto-streamer
