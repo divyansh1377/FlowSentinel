@@ -51,10 +51,10 @@ def train_and_export_models(n_samples: int = 20000):
     scaler = StandardScaler()
     X_scaled_normal = scaler.fit_transform(X_normal)
 
-    # Train Isolation Forest with 5% expected contamination
+    # Train Isolation Forest with 20 estimators for sub-15ms inference
     isolation_forest = IsolationForest(
-        n_estimators=150,
-        max_samples="auto",
+        n_estimators=20,
+        max_samples=256,
         contamination=0.04,
         random_state=42,
         n_jobs=-1
@@ -75,8 +75,8 @@ def train_and_export_models(n_samples: int = 20000):
     X_test_scaled = scaler.transform(X_test)
 
     random_forest = RandomForestClassifier(
-        n_estimators=200,
-        max_depth=12,
+        n_estimators=20,
+        max_depth=8,
         min_samples_split=4,
         min_samples_leaf=2,
         class_weight="balanced",

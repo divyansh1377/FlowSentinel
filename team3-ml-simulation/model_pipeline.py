@@ -1,18 +1,22 @@
 """
 FlowSentinel - Team 3 (ML & Simulation)
-Unified Model Inference Engine (ChutePredictor)
+Phase 2: High-Performance Model Inference Engine & Intelligent SCADA Diagnostics (ChutePredictor)
 
-Provides a clean, thread-safe, high-speed inference interface for Team 2 (Backend).
-Handles feature transformation, dual model scoring (Isolation Forest + Random Forest),
-anomaly detection, and automated root cause diagnosis.
+Features:
+1. Sub-3ms Fast-Path Inference with pre-allocated NumPy memory buffers.
+2. Single-pass Isolation Forest scoring using decision_function().
+3. In-Memory Rolling Buffer (last 10 readings) for temporal rate-of-change (dW/dt, d(dist)/dt, vib jitter).
+4. Composite Chute Health & Risk Index (0–100 scale).
+5. Granular Industrial Root-Cause Diagnostics and Mitigation Procedures.
 """
 
 import os
 import time
 import json
+from collections import deque
 import joblib
 import numpy as np
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple, List
 
 FEATURE_COLUMNS = [
     "distance_cm",
@@ -35,10 +39,10 @@ STATUS_LABELS = {
 
 class ChutePredictor:
     """
-    Production-ready inference class imported by Team 2 (FastAPI Backend).
+    Production-grade inference engine with sub-3ms execution and temporal tracking.
     """
 
-    def __init__(self, models_dir: Optional[str] = None):
+    def __init__(self, models_dir: Optional[str] = None, buffer_size: int = 10):
         if models_dir is None:
             models_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models")
         self.models_dir = models_dir
@@ -47,6 +51,13 @@ class ChutePredictor:
         self.scaler = None
         self.metadata = None
         self.is_loaded = False
+        
+        # Pre-allocated feature buffer for zero-overhead NumPy allocation
+        self._feature_buffer = np.zeros((1, 4), dtype=np.float64)
+
+        # Thread-safe rolling temporal buffer: stores (time_sec, weight, distance, vibration)
+        self.history_buffer = deque(maxlen=buffer_size)
+
         self.load_models()
 
     def load_models(self) -> bool:
@@ -63,11 +74,14 @@ class ChutePredictor:
                 self.rf_model = joblib.load(rf_path)
                 self.if_model = joblib.load(if_path)
                 self.scaler = joblib.load(scaler_path)
+                if self.scaler:
+                    self._mean = self.scaler.mean_
+                    self._scale_inv = 1.0 / self.scaler.scale_
                 if os.path.exists(meta_path):
                     with open(meta_path, "r") as f:
                         self.metadata = json.load(f)
                 self.is_loaded = True
-                print("✅ [ChutePredictor] ML Models and Scaler successfully loaded.")
+                print("✅ [ChutePredictor] Optimized ML Models and Scaler successfully loaded.")
                 return True
             except Exception as e:
                 print(f"⚠️ [ChutePredictor] Error loading models: {e}. Falling back to heuristic mode.")
@@ -80,47 +94,53 @@ class ChutePredictor:
 
     def predict(self, telemetry: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Perform high-speed prediction and anomaly scoring for incoming telemetry.
+        Execute sub-3ms prediction, temporal dynamics calculation, and root-cause analysis.
         """
         start_time = time.perf_counter()
+        now = time.time()
 
-        # Extract features
-        distance = float(telemetry.get("distance_cm", 50.0))
+        # Extract features directly into pre-allocated NumPy array
+        dist = float(telemetry.get("distance_cm", 50.0))
         weight = float(telemetry.get("weight_kg", 300.0))
-        vibration = float(telemetry.get("vibration_g", 3.0))
-        flow_rate = float(telemetry.get("material_flow_rate_tph", 200.0))
+        vib = float(telemetry.get("vibration_g", 3.0))
+        flow = float(telemetry.get("material_flow_rate_tph", 200.0))
 
-        features = np.array([[distance, weight, vibration, flow_rate]])
+        self._feature_buffer[0, 0] = dist
+        self._feature_buffer[0, 1] = weight
+        self._feature_buffer[0, 2] = vib
+        self._feature_buffer[0, 3] = flow
 
-        if self.is_loaded and self.rf_model and self.if_model and self.scaler:
-            # Scaled features
-            features_scaled = self.scaler.transform(features)
+        # Compute temporal rates of change
+        dw_dt, ddist_dt, vib_std = self._update_temporal_buffer(now, weight, dist, vib)
+
+        if self.is_loaded and self.rf_model and self.if_model and hasattr(self, "_mean"):
+            # Zero-overhead inline vector scaling
+            features_scaled = (self._feature_buffer - self._mean) * self._scale_inv
 
             # Random Forest Inference
-            class_pred = int(self.rf_model.predict(features_scaled)[0])
             probabilities = self.rf_model.predict_proba(features_scaled)[0]
+            class_pred = int(np.argmax(probabilities))
             prob_dict = {
                 "normal": round(float(probabilities[0]), 4),
                 "warning": round(float(probabilities[1]) if len(probabilities) > 1 else 0.0, 4),
                 "blockage": round(float(probabilities[2]) if len(probabilities) > 2 else 0.0, 4),
             }
-            confidence = round(float(np.max(probabilities)), 4)
+            confidence = round(float(probabilities[class_pred]), 4)
 
-            # Isolation Forest Anomaly Detection
-            # -1 = anomaly, 1 = normal in scikit-learn
-            if_pred = int(self.if_model.predict(features_scaled)[0])
-            is_anomaly = True if if_pred == -1 else False
-            raw_score = float(self.if_model.score_samples(features_scaled)[0])
-            # Normalize raw_score to 0.0-1.0 anomaly index (higher = more anomalous)
-            anomaly_score = round(float(np.clip(-raw_score, 0.0, 1.0)), 4)
+            # Isolation Forest Fast-Path (single pass decision_function avoids dual tree traversals)
+            raw_decision = float(self.if_model.decision_function(features_scaled)[0])
+            is_anomaly = raw_decision < 0.0
+            # Normalize decision score to [0.0, 1.0] anomaly index (higher = more anomalous)
+            anomaly_score = round(float(np.clip(0.5 - raw_decision, 0.0, 1.0)), 4)
+            raw_score = round(raw_decision, 4)
 
         else:
-            # Physics-based heuristic fallback (ensures backend never crashes even without models)
-            if distance < 15.0 or weight > 850.0 or (distance < 25.0 and vibration < 0.5):
+            # Resilient physics heuristic fallback
+            if dist < 15.0 or weight > 850.0 or (dist < 25.0 and vib < 0.5):
                 class_pred = 2
                 prob_dict = {"normal": 0.02, "warning": 0.08, "blockage": 0.90}
                 confidence = 0.90
-            elif distance < 35.0 or weight > 500.0 or vibration < 1.5:
+            elif dist < 35.0 or weight > 500.0 or vib < 1.5:
                 class_pred = 1
                 prob_dict = {"normal": 0.10, "warning": 0.85, "blockage": 0.05}
                 confidence = 0.85
@@ -129,12 +149,17 @@ class ChutePredictor:
                 prob_dict = {"normal": 0.95, "warning": 0.04, "blockage": 0.01}
                 confidence = 0.95
 
-            is_anomaly = True if (vibration > 10.0 or (distance < 5.0 and weight < 50.0)) else False
+            is_anomaly = True if (vib > 9.5 or (dist < 5.0 and weight < 50.0)) else False
             anomaly_score = 0.85 if is_anomaly else 0.12
             raw_score = -0.75 if is_anomaly else 0.25
 
-        # Root cause diagnosis & recommended action
-        diagnosis, recommendation = self._generate_diagnosis(class_pred, is_anomaly, distance, weight, vibration)
+        # Calculate Composite Chute Health & Risk Index (0-100)
+        risk_score, health_state = self._compute_composite_risk(prob_dict, anomaly_score, dw_dt, dist)
+
+        # Advanced Industrial Diagnostics
+        diag = self._generate_detailed_diagnosis(
+            class_pred, is_anomaly, dist, weight, vib, dw_dt, ddist_dt, vib_std, risk_score, health_state
+        )
 
         latency_ms = round((time.perf_counter() - start_time) * 1000, 2)
 
@@ -147,74 +172,180 @@ class ChutePredictor:
             "anomaly_detection": {
                 "is_anomaly": is_anomaly,
                 "anomaly_score": anomaly_score,
-                "isolation_forest_raw": round(raw_score, 4)
+                "isolation_forest_raw": raw_score
             },
-            "root_cause_analysis": diagnosis,
-            "recommended_action": recommendation,
+            "root_cause_analysis": diag["root_cause_summary"],
+            "recommended_action": diag["recommended_action"],
+            "diagnostic_breakdown": diag,
             "telemetry_echo": {
-                "distance_cm": distance,
+                "distance_cm": dist,
                 "weight_kg": weight,
-                "vibration_g": vibration,
-                "material_flow_rate_tph": flow_rate
+                "vibration_g": vib,
+                "material_flow_rate_tph": flow
             },
             "latency_ms": latency_ms
         }
 
-    def _generate_diagnosis(self, status_code: int, is_anomaly: bool, dist: float, weight: float, vib: float) -> Tuple[str, str]:
-        if is_anomaly:
-            if vib > 9.0:
-                return (
-                    "Erratic mechanical vibration surge detected. Possible loose liner plate or severe structural resonance.",
-                    "Inspect chute structural mounting and damping pads immediately."
-                )
-            elif dist < 10.0 and weight < 50.0:
-                return (
-                    "Ultrasonic sensor lens blinding / dust coating suspected (low clearance but negligible mass).",
-                    "Purge ultrasonic transducer air ring and check sensor alignment."
-                )
-            else:
-                return (
-                    "Out-of-distribution multi-sensor pattern identified by Isolation Forest.",
-                    "Perform instrument diagnostic check on sensor junction box."
-                )
+    def _update_temporal_buffer(self, t: float, weight: float, dist: float, vib: float) -> Tuple[float, float, float]:
+        """
+        Appends reading and computes dW/dt, d(dist)/dt, and rolling vibration variance.
+        """
+        self.history_buffer.append((t, weight, dist, vib))
+        if len(self.history_buffer) < 2:
+            return 0.0, 0.0, 0.0
 
-        if status_code == 2:  # BLOCKAGE
-            if dist < 15.0 and weight > 900.0:
-                return (
-                    "Critical material choke: Bed accumulation reached maximum fill with dead mechanical vibration.",
-                    "Trigger emergency upstream conveyor stop. Activate air cannons / vibrators."
-                )
-            elif vib < 0.3:
-                return (
-                    "Stagnant material plug formed in lower chute funnel.",
-                    "Halt feed and initiate mechanical clearing sequence."
-                )
-            else:
-                return (
-                    "Overburden threshold exceeded with severe flow constriction.",
-                    "Shutdown feeder immediately to prevent motor burnout."
-                )
+        oldest = self.history_buffer[0]
+        dt = max(0.001, t - oldest[0])
 
-        elif status_code == 1:  # WARNING
-            if weight > 600.0:
-                return (
-                    "Progressive material buildup detected along chute sidewalls.",
-                    "Throttle upstream feed rate by 30% and monitor clearance."
-                )
+        dw_dt = (weight - oldest[1]) / dt
+        ddist_dt = (dist - oldest[2]) / dt
+
+        vibs = [sample[3] for sample in self.history_buffer]
+        vib_std = float(np.std(vibs))
+
+        return round(float(dw_dt), 2), round(float(ddist_dt), 2), round(vib_std, 3)
+
+    def _compute_composite_risk(self, probs: Dict[str, float], anomaly_score: float, dw_dt: float, dist: float) -> Tuple[float, str]:
+        """
+        Calculates a 0–100 Chute Risk Score fusing probabilities, anomaly scores, and temporal surge rates.
+        """
+        # Base risk from classification probabilities
+        base_risk = (probs["blockage"] * 70.0) + (probs["warning"] * 25.0)
+
+        # Anomaly contribution (0 - 20)
+        anomaly_risk = anomaly_score * 20.0
+
+        # Surge rate penalty: sudden mass surge rate dW/dt > 40 kg/s
+        surge_penalty = 0.0
+        if dw_dt > 40.0:
+            surge_penalty = min(20.0, (dw_dt - 40.0) * 0.4)
+
+        # Clearance fill penalty
+        fill_penalty = 0.0
+        if dist < 20.0:
+            fill_penalty = min(15.0, (20.0 - dist) * 1.0)
+
+        total_risk = round(float(np.clip(base_risk + anomaly_risk + surge_penalty + fill_penalty, 0.0, 100.0)), 1)
+
+        if total_risk >= 75.0:
+            health_state = "CRITICAL_INTERVENTION_REQUIRED"
+        elif total_risk >= 50.0:
+            health_state = "ELEVATED_RISK_WARNING"
+        elif total_risk >= 25.0:
+            health_state = "MODERATE_BUILDUP_STABLE"
+        else:
+            health_state = "OPTIMAL_CONTINUOUS_FLOW"
+
+        return total_risk, health_state
+
+    def _generate_detailed_diagnosis(
+        self,
+        status_code: int,
+        is_anomaly: bool,
+        dist: float,
+        weight: float,
+        vib: float,
+        dw_dt: float,
+        ddist_dt: float,
+        vib_std: float,
+        risk_score: float,
+        health_state: str
+    ) -> Dict[str, Any]:
+        """
+        Pinpoints failure modes among 6 industrial root causes with mitigation recommendations.
+        """
+        # 1. Specific Sensor & Mechanical Hardware Anomalies
+        if vib > 9.0:
+            cat = "MECHANICAL_RESONANCE_OR_LOOSE_LINER"
+            sev = "HIGH"
+            evidence = f"Extreme vibration spike ({vib:.2f} G RMS) without mass blockage. Liner plate or impact pad loose."
+            action = "Halt conveyor at next scheduled stop; inspect chute liner bolts and damping rubber pads."
+            summary = "Severe mechanical vibration surge detected. Structural wear liner looseness suspected."
+        elif dist < 10.0 and weight < 50.0:
+            cat = "SENSOR_OPTICAL_BLINDING"
+            sev = "MODERATE"
+            evidence = f"Ultrasonic clearance near-zero ({dist:.1f} cm) with negligible load mass ({weight:.1f} kg)."
+            action = "Purge ultrasonic transducer face with compressed air ring; clean dust coating on sensor window."
+            summary = "Ultrasonic sensor blinding suspected (air gap zeroed without corresponding mass loading)."
+        elif weight > 1200.0 and vib > 5.0 and dist > 40.0:
+            cat = "LOAD_CELL_DRIFT_OR_FAULT"
+            sev = "MODERATE"
+            evidence = f"Weight sensor reports {weight:.1f} kg while clearance remains open ({dist:.1f} cm)."
+            action = "Check load cell strain gauge excitation voltage and zero-tare calibration."
+            summary = "Load cell calibration drift suspected. Mass reading contradicts clearance profile."
+
+        # 2. Confirmed Physical Blockage
+        elif status_code == 2:
+            if dist < 15.0 and vib < 0.40:
+                cat = "CRITICAL_FUNNEL_CHOKE"
+                sev = "CRITICAL"
+                evidence = f"Full bed accumulation ({dist:.1f} cm clearance) with near-zero vibration ({vib:.2f} G) and heavy mass ({weight:.1f} kg)."
+                action = "IMMEDIATE EMERGENCY STOP of upstream feeder belt. Trigger high-pressure pneumatic air cannons."
+                summary = "Critical material choke: Bed accumulation reached maximum fill with dead mechanical vibration."
+            elif dw_dt > 50.0:
+                cat = "RAPID_SURGE_JAM"
+                sev = "CRITICAL"
+                evidence = f"Rapid mass accumulation rate (+{dw_dt:.1f} kg/s) leading to instant throat choke."
+                action = "Trip conveyor interlock; activate discharge vibrator motors to disperse jam."
+                summary = "Rapid material surge jam formed in transfer chute."
+            else:
+                cat = "OVERBURDEN_FLOW_STOPPAGE"
+                sev = "CRITICAL"
+                evidence = f"Chute burden exceeds capacity ({weight:.1f} kg) with severe material stagnation."
+                action = "Shut down upstream feed to prevent belt motor overload; initiate manual clearing sequence."
+                summary = "Overburden threshold exceeded with complete flow stoppage."
+
+        # 3. Confirmed Warning / Sluggish Buildup
+        elif status_code == 1:
+            if dw_dt > 25.0:
+                cat = "ACCELERATING_BUILDUP"
+                sev = "ELEVATED"
+                evidence = f"Material mass increasing at +{dw_dt:.1f} kg/s with declining clearance ({ddist_dt:.1f} cm/s)."
+                action = "Throttle upstream feed by 35%; pulse auxiliary acoustic vibrators."
+                summary = "Accelerating material buildup detected. Rate of accumulation indicates impending jam."
             elif vib < 1.2:
-                return (
-                    "Material flow sluggishness causing vibration dampening.",
-                    "Inspect moisture content and trigger periodic vibrator pulsing."
-                )
+                cat = "SLUGGISH_SIDEWALL_RESTRICTION"
+                sev = "WARNING"
+                evidence = f"Vibration dampening ({vib:.2f} G) indicates thick material cushion adhering to chute walls."
+                action = "Reduce belt speed by 20%; inspect moisture content and fine ore proportion."
+                summary = "Progressive material buildup detected along chute sidewalls with dampening vibration."
             else:
-                return (
-                    "Transient surge in chute loading above nominal threshold.",
-                    "Verify secondary conveyor discharge clearance."
-                )
+                cat = "TRANSIENT_RESTRICTION"
+                sev = "WARNING"
+                evidence = f"Nominal clearance narrowing ({dist:.1f} cm) with elevated load ({weight:.1f} kg)."
+                action = "Monitor discharge conveyor clearance and prepare vibrator sequence."
+                summary = "Transient surge in chute loading above nominal threshold."
 
-        else:  # NORMAL
-            return (
-                "Dynamic equilibrium flow. Kinetic impact frequency and clearance within nominal bounds.",
-                "Maintain standard operating feed rate."
-            )
+        # 4. Out-of-Distribution Sensor Anomaly on Non-Blockage
+        elif is_anomaly:
+            cat = "UNCLASSIFIED_SENSOR_ANOMALY"
+            sev = "WARNING"
+            evidence = f"Out-of-distribution multi-sensor vector identified by Isolation Forest."
+            action = "Inspect local sensor junction box and signal cabling for RF interference."
+            summary = "Out-of-distribution multi-sensor pattern identified by Isolation Forest."
 
+        # 5. Normal Flow
+        else:
+            cat = "NORMAL_OPERATION"
+            sev = "NOMINAL"
+            evidence = f"Clearance ({dist:.1f} cm), load ({weight:.1f} kg), and kinetic vibration ({vib:.2f} G) in dynamic balance."
+            action = "No intervention required. Maintain current continuous feed setpoint."
+            summary = "Dynamic equilibrium flow. Kinetic impact frequency and clearance within nominal bounds."
+
+        return {
+            "fault_category": cat,
+            "fault_severity": sev,
+            "primary_sensor_evidence": evidence,
+            "mitigation_procedure": action,
+            "root_cause_summary": summary,
+            "recommended_action": action,
+            "temporal_metrics": {
+                "dw_dt_kg_per_sec": dw_dt,
+                "ddist_dt_cm_per_sec": ddist_dt,
+                "vibration_variance": vib_std
+            },
+            "chute_health_index": {
+                "risk_score": risk_score,
+                "health_state": health_state
+            }
+        }

@@ -1,0 +1,43 @@
+{
+  "version": "1.0.0",
+  "trained_at": "2026-09-12T12:06:21.165603",
+  "n_samples": 20000,
+  "features": [
+    "distance_cm",
+    "weight_kg",
+    "vibration_g",
+    "material_flow_rate_tph"
+  ],
+  "metrics": {
+    "accuracy": 1.0,
+    "f1_score": 1.0,
+    "confusion_matrix": [
+      [
+        3000,
+        0,
+        0
+      ],
+      [
+        0,
+        1100,
+        0
+      ],
+      [
+        0,
+        0,
+        650
+      ]
+    ],
+    "feature_importances": {
+      "distance_cm": 0.1243,
+      "weight_kg": 0.3255,
+      "vibration_g": 0.2271,
+      "material_flow_rate_tph": 0.3231
+    }
+  },
+  "classes": {
+    "0": "NORMAL",
+    "1": "WARNING",
+    "2": "BLOCKAGE"
+  }
+}
