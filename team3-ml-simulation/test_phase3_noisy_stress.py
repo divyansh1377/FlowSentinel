@@ -643,8 +643,13 @@ def task4_temporal_buffer_validation():
 # RUNNER
 # ══════════════════════════════════════════════════════════════════════════════
 
-def main():
+def run_phase3_suite():
+    """Run the suite and return machine-readable counts for CI/reporting."""
     global PASS_COUNT, FAIL_COUNT
+
+    PASS_COUNT = 0
+    FAIL_COUNT = 0
+    RESULTS.clear()
 
     print("=" * 75)
     print("🔬 FlowSentinel — PHASE 3 HARDENING & VALIDATION TEST SUITE")
@@ -666,12 +671,16 @@ def main():
         for suite, outcomes in RESULTS.items():
             if "FAIL" in outcomes:
                 print(f"  • {suite}")
-        sys.exit(1)
     else:
         print("\n✅ ALL CHECKS PASSED — Phase 3 ML hardening complete.")
-        sys.exit(0)
+
+    return PASS_COUNT, total, FAIL_COUNT
+
+
+def main():
+    _, _, failures = run_phase3_suite()
+    sys.exit(1 if failures else 0)
 
 
 if __name__ == "__main__":
     main()
-

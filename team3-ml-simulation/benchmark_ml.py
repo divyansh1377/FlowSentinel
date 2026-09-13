@@ -9,14 +9,60 @@ Measures:
 4. Inference Latency (Mean, P95, P99 in milliseconds)
 """
 
+import sys
 import time
+from datetime import datetime, timezone
+from pathlib import Path
 import numpy as np
 import pandas as pd
 from sklearn.metrics import classification_report, precision_recall_fscore_support
 from data_generator import ChutePhysicsGenerator
 from model_pipeline import ChutePredictor
+from test_phase3_noisy_stress import run_phase3_suite
 
 FEATURE_COLUMNS = ["distance_cm", "weight_kg", "vibration_g", "material_flow_rate_tph"]
+REPORT_PATH = Path(__file__).with_name("EVALUATION_REPORT.md")
+
+
+def write_evaluation_report(metrics: dict, stress_passed: int, stress_total: int) -> None:
+    """Overwrite the checked-in report with metrics produced in this run."""
+    generated_at = datetime.now(timezone.utc).isoformat()
+    report = f"""# FlowSentinel ML Evaluation Report
+
+Generated: `{generated_at}`
+
+## Current validation results
+
+| Metric | Result |
+| --- | ---: |
+| Random Forest classification accuracy | {metrics['accuracy_pct']:.2f}% |
+| Isolation Forest anomaly recall | {metrics['anomaly_recall_pct']:.2f}% |
+| Isolation Forest false-positive rate | {metrics['if_fpr_pct']:.2f}% |
+| Mean inference latency | {metrics['latency_mean_ms']:.3f} ms |
+| P95 inference latency | {metrics['latency_p95_ms']:.3f} ms |
+| P99 inference latency | {metrics['latency_p99_ms']:.3f} ms |
+| Phase 3 stress checks | {stress_passed}/{stress_total} passed |
+
+## Per-class Random Forest metrics
+
+| Class | Precision | Recall | F1 |
+| --- | ---: | ---: | ---: |
+"""
+    for label, values in metrics["per_class"].items():
+        report += (
+            f"| {label} | {values['precision']:.4f} | "
+            f"{values['recall']:.4f} | {values['f1']:.4f} |\n"
+        )
+    report += """
+
+## Method
+
+The anomaly decision combines a calibrated Isolation Forest trained on all
+non-fault operational states with deterministic physics-consistency guards for
+high-confidence sensor and mechanical faults. The Phase 3 total above is a
+hard CI gate: a failed stress check makes `benchmark_ml.py` exit with code 1.
+"""
+    REPORT_PATH.write_text(report, encoding="utf-8")
 
 def run_benchmarks(n_eval_samples: int = 2000):
     print(f"📊 [Team 3 Benchmark] Running validation on {n_eval_samples} physics-simulated samples...")
@@ -140,6 +186,8 @@ def run_benchmarks(n_eval_samples: int = 2000):
     }
 
 if __name__ == "__main__":
-    run_benchmarks()
-
+    metrics = run_benchmarks()
+    stress_passed, stress_total, stress_failures = run_phase3_suite()
+    write_evaluation_report(metrics, stress_passed, stress_total)
+    sys.exit(1 if stress_failures else 0)
 

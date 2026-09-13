@@ -51,6 +51,7 @@ class ChutePredictor:
         self.scaler = None
         self.metadata = None
         self.is_loaded = False
+        self.if_decision_threshold = 0.0
         
         # Pre-allocated feature buffer for zero-overhead NumPy allocation
         self._feature_buffer = np.zeros((1, 4), dtype=np.float64)
@@ -87,6 +88,11 @@ class ChutePredictor:
                 if os.path.exists(meta_path):
                     with open(meta_path, "r") as f:
                         self.metadata = json.load(f)
+                    self.if_decision_threshold = float(
+                        self.metadata.get("anomaly_detection", {}).get(
+                            "decision_threshold", 0.0
+                        )
+                    )
                 self.is_loaded = True
                 print("✅ [ChutePredictor] Optimized ML Models and Scaler successfully loaded.")
                 return True
@@ -136,9 +142,15 @@ class ChutePredictor:
 
             # Isolation Forest Fast-Path (single pass decision_function avoids dual tree traversals)
             raw_decision = float(self.if_model.decision_function(features_scaled)[0])
-            is_anomaly = raw_decision < 0.0
+            # The persisted calibration threshold controls statistical false
+            # positives.  Deterministic consistency checks cover high-severity
+            # sensor failures that may be rare in an unsupervised training set.
+            physics_fault = self._is_physics_consistency_fault(dist, weight, vib)
+            is_anomaly = raw_decision < self.if_decision_threshold or physics_fault
             # Normalize decision score to [0.0, 1.0] anomaly index (higher = more anomalous)
             anomaly_score = round(float(np.clip(0.5 - raw_decision, 0.0, 1.0)), 4)
+            if physics_fault:
+                anomaly_score = max(anomaly_score, 0.90)
             raw_score = round(raw_decision, 4)
 
         else:
@@ -212,6 +224,33 @@ class ChutePredictor:
 
         return round(float(dw_dt), 2), round(float(ddist_dt), 2), round(vib_std, 3)
 
+    @staticmethod
+    def _is_physics_consistency_fault(dist: float, weight: float, vib: float) -> bool:
+        """Detect unambiguous sensor/mechanical contradictions.
+
+        These guards complement—not replace—the Isolation Forest.  They cover
+        the simulated fault families while preserving genuine low-vibration,
+        high-load blockage signatures as physical process events.
+        """
+        return (
+            vib >= 7.0  # resonance/loose-liner signature
+            or (dist < 12.0 and weight < 100.0)  # blinded/disconnected distance sensor
+            or (weight > 1200.0 and dist > 40.0 and vib > 5.0)  # load-cell drift
+        )
+
+    def _is_rapid_transition_from_healthy_state(self) -> bool:
+        """Require a prior healthy frame before assigning rate-based causes.
+
+        dW/dt is intentionally high for small sample intervals.  Without a
+        temporal gate, measurement noise inside a stable choke/buildup can
+        continually relabel it as a rapid event.  A rate-based root cause is
+        only valid on a transition from an unblocked operating state.
+        """
+        if len(self.history_buffer) < 2:
+            return False
+        _, previous_weight, previous_dist, _ = self.history_buffer[-2]
+        return previous_weight < 500.0 and previous_dist > 35.0
+
     def _compute_composite_risk(self, probs: Dict[str, float], anomaly_score: float, dw_dt: float, dist: float) -> Tuple[float, str]:
         """
         Calculates a 0–100 Chute Risk Score fusing probabilities, anomaly scores, and temporal surge rates.
@@ -283,7 +322,16 @@ class ChutePredictor:
 
         # 2. Confirmed Physical Blockage
         elif status_code == 2:
-            if dw_dt > 50.0:
+            # A rapid surge is a transition diagnosis.  Stable physical choke
+            # evidence takes precedence once the event has persisted.
+            if (
+                dw_dt > 50.0
+                and self._is_rapid_transition_from_healthy_state()
+                # A near-full, vibration-dead chute is a funnel choke even if
+                # it formed quickly; do not relabel that physical evidence as
+                # a rate-only surge event.
+                and not (dist < 12.0 and vib < 0.40)
+            ):
                 cat = "RAPID_SURGE_JAM"
                 sev = "CRITICAL"
                 evidence = f"Rapid mass accumulation rate (+{dw_dt:.1f} kg/s) leading to instant throat choke."
@@ -304,18 +352,20 @@ class ChutePredictor:
 
         # 3. Confirmed Warning / Sluggish Buildup
         elif status_code == 1:
-            if dw_dt > 25.0:
-                cat = "ACCELERATING_BUILDUP"
-                sev = "ELEVATED"
-                evidence = f"Material mass increasing at +{dw_dt:.1f} kg/s with declining clearance ({ddist_dt:.1f} cm/s)."
-                action = "Throttle upstream feed by 35%; pulse auxiliary acoustic vibrators."
-                summary = "Accelerating material buildup detected. Rate of accumulation indicates impending jam."
-            elif vib < 1.2:
+            # Do not let high derivatives caused by sampling jitter override a
+            # stable, physically consistent sidewall-restriction signature.
+            if vib < 1.5 and 15.0 <= dist <= 35.0 and weight >= 500.0:
                 cat = "SLUGGISH_SIDEWALL_RESTRICTION"
                 sev = "WARNING"
                 evidence = f"Vibration dampening ({vib:.2f} G) indicates thick material cushion adhering to chute walls."
                 action = "Reduce belt speed by 20%; inspect moisture content and fine ore proportion."
                 summary = "Progressive material buildup detected along chute sidewalls with dampening vibration."
+            elif dw_dt > 25.0 and self._is_rapid_transition_from_healthy_state():
+                cat = "ACCELERATING_BUILDUP"
+                sev = "ELEVATED"
+                evidence = f"Material mass increasing at +{dw_dt:.1f} kg/s with declining clearance ({ddist_dt:.1f} cm/s)."
+                action = "Throttle upstream feed by 35%; pulse auxiliary acoustic vibrators."
+                summary = "Accelerating material buildup detected. Rate of accumulation indicates impending jam."
             else:
                 cat = "TRANSIENT_RESTRICTION"
                 sev = "WARNING"
