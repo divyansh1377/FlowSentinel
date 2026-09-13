@@ -18,9 +18,9 @@ import pandas as pd
 
 # Add current directory to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from data_generator import ChutePhysicsGenerator
+from data_generator import CHUTE_ANGLE_DEG, GRAVITY_MPS2, ChutePhysicsGenerator
 
-def run_physics_verification(n_samples: int = 10000):
+def run_physics_verification(n_samples: int = 20000):
     print("=" * 70)
     print("🔍 [Team 3 - Engineer 6] Initiating Phase 1 Physics & Data Verification")
     print("=" * 70)
@@ -83,9 +83,39 @@ def run_physics_verification(n_samples: int = 10000):
     print("  ✓ PASS: Tri-axial acceleration vectors mathematically agree with scalar RMS.")
 
     # -------------------------------------------------------------
-    # 5. Class & Anomaly Balance Breakdown
+    # 5. Explicit gravity/friction/bed-height dynamics
     # -------------------------------------------------------------
-    print("\n📊 [Test 5] Dataset Distribution & Class Breakdown:")
+    print("\n🧮 [Test 5] Gravity, Friction, Bed Height & Velocity Equations:")
+    theta = np.deg2rad(CHUTE_ANGLE_DEG)
+    expected_accel = GRAVITY_MPS2 * (
+        np.sin(theta) - np.tan(np.deg2rad(df["friction_angle_deg"])) * np.cos(theta)
+    )
+    assert np.allclose(df["effective_accel_mps2"], expected_accel.clip(lower=0.05), atol=1e-4)
+    assert np.abs(df["bed_height_cm"] + df["true_distance_cm"] - 100.0).max() < 0.01
+    mean_velocity = non_anomalies.groupby("state_label")["ore_velocity_mps"].mean()
+    assert mean_velocity[0] > mean_velocity[1] > mean_velocity[2]
+    print("  ✓ Gravity/friction acceleration, bed height and velocity coupling verified")
+
+    # -------------------------------------------------------------
+    # 6. Hardware noise, quantization and explicit fault profiles
+    # -------------------------------------------------------------
+    print("\n🔌 [Test 6] Hardware Noise, Quantization & Fault Models:")
+    assert (df["distance_cm"] * 10).round(6).map(float.is_integer).all()
+    assert (df["weight_kg"] * 2).round(6).map(float.is_integer).all()
+    assert (df["vibration_g"] * 100).round(6).map(float.is_integer).all()
+    assert df["hx711_electrical_noise_kg"].std() > 0
+    assert df["mpu6050_jitter_g"].std() > 0
+    for fault_type in ("signal_dropout", "resonance_surge", "inverted_physics", "load_cell_drift"):
+        fault = generator.generate_sample(state=3, fault_type=fault_type)
+        assert fault["fault_type"] == fault_type and fault["is_anomaly"] == 1
+    dropout = generator.generate_sample(state=3, fault_type="signal_dropout")
+    assert dropout["signal_dropout"] and dropout["distance_cm"] == 0.0
+    print("  ✓ Dropout, HX711 noise/drift, MPU6050 bias/jitter and quantization verified")
+
+    # -------------------------------------------------------------
+    # 7. Class & Anomaly Balance Breakdown
+    # -------------------------------------------------------------
+    print("\n📊 [Test 7] Dataset Distribution & Class Breakdown:")
     counts = df["state_label"].value_counts().to_dict()
     anomaly_count = int(df["is_anomaly"].sum())
 
@@ -101,4 +131,3 @@ def run_physics_verification(n_samples: int = 10000):
 
 if __name__ == "__main__":
     run_physics_verification()
-

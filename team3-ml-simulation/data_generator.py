@@ -1,152 +1,166 @@
-"""
-FlowSentinel - Team 3 (ML & Simulation)
-Physics-Based Synthetic Sensor Telemetry Generator for Steel Plant Chutes.
+"""Physics-based synthetic telemetry for the FlowSentinel transfer chute."""
 
-Simulates 3 logical sensors with realistic industrial noise, physical coupling, and state transitions:
-1. Ultrasonic Distance Sensor (cm) - Air gap between sensor and material bed.
-2. HX711 Load Cell Sensor (kg) - Instantaneous mass of ore resting in/passing through chute.
-3. MPU6050 3-Axis Accelerometer (G RMS) - Kinetic impact oscillations and turbulence.
-"""
+import random
+from typing import Any, Dict, Optional
 
 import numpy as np
 import pandas as pd
-import random
-from typing import Dict, List, Tuple, Any
 
-# Sensor Physical Operating Limits
-CHUTE_EMPTY_DISTANCE_CM = 100.0  # Max sensor clearance when empty
-CHUTE_FULL_DISTANCE_CM = 5.0     # Minimum clearance when completely choked
-MAX_LOAD_CAPACITY_KG = 1500.0    # Structural limit for weight accumulation
+GRAVITY_MPS2 = 9.81
+CHUTE_ANGLE_DEG = 55.0
+CHUTE_LENGTH_M = 3.0
+SENSING_BED_AREA_M2 = 0.45
+CHUTE_HEIGHT_CM = 100.0
+MATERIAL_DENSITY_KG_M3 = 1600.0
+MAX_LOAD_CAPACITY_KG = 1500.0
+
+ULTRASONIC_RESOLUTION_CM = 0.1
+HX711_RESOLUTION_KG = 0.5
+MPU6050_RESOLUTION_G = 0.01
+FLOW_RESOLUTION_TPH = 0.1
+
+
+def _quantize(value: float, resolution: float) -> float:
+    return round(round(value / resolution) * resolution, 6)
+
 
 class ChutePhysicsGenerator:
+    """Generate coupled chute telemetry and hardware-fault profiles.
+
+    Operating states specify fill, compaction and friction regimes. Bed height
+    determines clearance/mass; gravity and Coulomb friction determine velocity;
+    velocity determines throughput and impact vibration.
     """
-    Generates physically consistent telemetry simulating steel manufacturing transfer chutes.
-    States:
-        0: Normal continuous flow (Dynamic equilibrium, moderate weight, high vibration, good clearance)
-        1: Warning / Flow restriction (Material sluggishness, rising weight, dampening vibration, decreasing clearance)
-        2: Blockage / Choke (Dead-stop plug, excessive weight, near-zero vibration, minimal clearance)
-        3: Anomaly / Sensor fault (Erratic readings, out-of-distribution noise, electrical disconnects)
-    """
+
+    _STATE_PARAMETERS = {
+        # fill ratio, fill std, friction angle, friction std, velocity damping
+        0: (0.45, 0.060, 25.0, 2.0, 0.45),
+        1: (0.73, 0.045, 32.0, 2.0, 0.20),
+        2: (0.92, 0.025, 38.0, 1.5, 0.008),
+    }
 
     def __init__(self, seed: int = 42):
-        np.random.seed(seed)
-        random.seed(seed)
+        self.rng = np.random.default_rng(seed)
+        self.random = random.Random(seed)
+        self._hx711_drift_kg = 0.0
+        self._mpu6050_bias_g = 0.0
 
-    def generate_sample(self, state: int = 0, inject_noise: bool = True) -> Dict[str, Any]:
-        """
-        Generate a single instantaneous sensor sample for a given physical state.
-        """
-        noise_factor = 1.0 if inject_noise else 0.0
+    def _operating_dynamics(self, state: int) -> Dict[str, float]:
+        fill_mean, fill_std, friction_mean, friction_std, damping = self._STATE_PARAMETERS[state]
+        fill_ratio = float(np.clip(self.rng.normal(fill_mean, fill_std), 0.02, 0.98))
+        friction_deg = float(np.clip(self.rng.normal(friction_mean, friction_std), 15.0, 45.0))
+        compaction = {0: 0.95, 1: 1.25, 2: 1.65}[state]
+        compaction *= float(np.clip(self.rng.normal(1.0, 0.04), 0.85, 1.15))
 
-        if state == 0:  # NORMAL FLOW
-            # Clearance: 40 - 75 cm
-            dist_mean, dist_std = 55.0, 6.0
-            # Weight: 180 - 450 kg (continuous movement)
-            weight_mean, weight_std = 320.0, 45.0
-            # Vibration: 2.0 - 5.5 G RMS (healthy dynamic rock collisions)
-            vib_mean, vib_std = 3.2, 0.55
-            # Flow rate: 150 - 350 tons/hour
-            flow_mean, flow_std = 240.0, 30.0
+        bed_height_cm = fill_ratio * CHUTE_HEIGHT_CM
+        bed_volume_m3 = (bed_height_cm / 100.0) * SENSING_BED_AREA_M2
+        true_weight_kg = min(bed_volume_m3 * MATERIAL_DENSITY_KG_M3 * compaction, MAX_LOAD_CAPACITY_KG)
 
-        elif state == 1:  # WARNING / RISING BUILDUP
-            # Clearance decreasing: 18 - 38 cm
-            dist_mean, dist_std = 27.0, 4.5
-            # Weight increasing: 500 - 800 kg
-            weight_mean, weight_std = 660.0, 60.0
-            # Vibration dampening as ore bed thickens: 0.8 - 1.8 G RMS
-            vib_mean, vib_std = 1.25, 0.25
-            # Flow rate dropping: 60 - 150 tons/hour
-            flow_mean, flow_std = 110.0, 20.0
-
-        elif state == 2:  # CRITICAL BLOCKAGE
-            # Clearance near zero: 4 - 15 cm
-            dist_mean, dist_std = 8.0, 2.5
-            # Heavy piled material: 850 - 1400 kg
-            weight_mean, weight_std = 1080.0, 110.0
-            # Dead vibration due to complete choke: 0.05 - 0.45 G RMS
-            vib_mean, vib_std = 0.22, 0.08
-            # Flow rate zeroed: 0 - 20 tons/hour
-            flow_mean, flow_std = 5.0, 3.0
-
-        elif state == 3:  # ANOMALY / SENSOR FAULT
-            anomaly_type = random.choice(["sensor_disconnect", "resonance_surge", "inverted_physics"])
-            if anomaly_type == "sensor_disconnect":
-                dist_mean, dist_std = 0.0, 0.5
-                weight_mean, weight_std = 0.0, 1.0
-                vib_mean, vib_std = 0.0, 0.01
-                flow_mean, flow_std = 0.0, 0.0
-            elif anomaly_type == "resonance_surge":
-                dist_mean, dist_std = 55.0, 5.0
-                weight_mean, weight_std = 300.0, 40.0
-                vib_mean, vib_std = 12.5, 2.0  # Massive mechanical chatter
-                flow_mean, flow_std = 220.0, 25.0
-            else:  # Inverted physics: low weight with zero distance
-                dist_mean, dist_std = 5.0, 1.0
-                weight_mean, weight_std = 25.0, 5.0
-                vib_mean, vib_std = 4.0, 0.5
-                flow_mean, flow_std = 200.0, 20.0
-        else:
-            raise ValueError(f"Unknown state: {state}")
-
-        # Sample values with Gaussian noise
-        distance_cm = np.clip(np.random.normal(dist_mean, dist_std * noise_factor), 1.0, CHUTE_EMPTY_DISTANCE_CM)
-        weight_kg = np.clip(np.random.normal(weight_mean, weight_std * noise_factor), 0.0, MAX_LOAD_CAPACITY_KG)
-        vibration_g = np.clip(np.random.normal(vib_mean, vib_std * noise_factor), 0.01, 15.0)
-        flow_rate_tph = np.clip(np.random.normal(flow_mean, flow_std * noise_factor), 0.0, 500.0)
-
-        # Decompose vibration into tri-axial components with noise
-        ratio_x = random.uniform(0.3, 0.5)
-        ratio_y = random.uniform(0.3, 0.5)
-        ratio_z = np.sqrt(max(0.01, 1.0 - ratio_x**2 - ratio_y**2))
-        vib_x = round(float(vibration_g * ratio_x + np.random.normal(0, 0.05)), 3)
-        vib_y = round(float(vibration_g * ratio_y + np.random.normal(0, 0.05)), 3)
-        vib_z = round(float(vibration_g * ratio_z + np.random.normal(0, 0.05)), 3)
+        theta = np.deg2rad(CHUTE_ANGLE_DEG)
+        friction = np.deg2rad(friction_deg)
+        # a = g(sin(theta) - tan(phi) cos(theta)); phi is the friction angle.
+        acceleration = max(0.05, float(GRAVITY_MPS2 * (
+            np.sin(theta) - np.tan(friction) * np.cos(theta)
+        )))
+        velocity = np.sqrt(2.0 * acceleration * CHUTE_LENGTH_M) * damping
+        flow_tph = max(0.0, 240.0 * (velocity / 2.5) * self.rng.normal(1.0, 0.05))
 
         return {
-            "distance_cm": round(float(distance_cm), 2),
-            "weight_kg": round(float(weight_kg), 2),
-            "vibration_g": round(float(vibration_g), 3),
-            "vibration_x": vib_x,
-            "vibration_y": vib_y,
-            "vibration_z": vib_z,
-            "material_flow_rate_tph": round(float(flow_rate_tph), 2),
-            "state_label": state if state < 3 else 0,  # 0, 1, or 2 for classifier
-            "is_anomaly": 1 if state == 3 else 0
+            "bed_height_cm": bed_height_cm,
+            "true_distance_cm": CHUTE_HEIGHT_CM - bed_height_cm,
+            "true_weight_kg": true_weight_kg,
+            "true_vibration_g": 0.12 + 1.20 * velocity,
+            "flow_tph": min(flow_tph, 500.0),
+            "friction_angle_deg": friction_deg,
+            "effective_accel_mps2": acceleration,
+            "ore_velocity_mps": velocity,
         }
 
-    def generate_dataset(self, n_samples: int = 15000) -> pd.DataFrame:
-        """
-        Generate a balanced training dataset with realistic operational proportions:
-        - 60% Normal Flow (State 0)
-        - 22% Warning Buildup (State 1)
-        - 13% Critical Blockage (State 2)
-        - 5% Out-of-distribution Anomalies (State 3)
-        """
-        records = []
-        n_normal = int(n_samples * 0.60)
-        n_warning = int(n_samples * 0.22)
-        n_blockage = int(n_samples * 0.13)
-        n_anomalies = n_samples - (n_normal + n_warning + n_blockage)
+    def generate_sample(
+        self, state: int = 0, inject_noise: bool = True, fault_type: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Generate one quantized reading; state 3 selects a hardware fault."""
+        if state not in (0, 1, 2, 3):
+            raise ValueError(f"Unknown state: {state}")
 
-        for _ in range(n_normal):
-            records.append(self.generate_sample(state=0))
-        for _ in range(n_warning):
-            records.append(self.generate_sample(state=1))
-        for _ in range(n_blockage):
-            records.append(self.generate_sample(state=2))
-        for _ in range(n_anomalies):
-            records.append(self.generate_sample(state=3))
+        is_fault = state == 3
+        dynamics = self._operating_dynamics(0 if is_fault else state)
+        noise_scale = 1.0 if inject_noise else 0.0
 
-        df = pd.DataFrame(records)
-        # Shuffle dataset
-        df = df.sample(frac=1.0, random_state=42).reset_index(drop=True)
-        return df
+        # Slow sensor bias random walks plus per-sample electrical/jitter noise.
+        self._hx711_drift_kg = float(np.clip(
+            self._hx711_drift_kg + self.rng.normal(0.0, 0.15 * noise_scale), -8.0, 8.0
+        ))
+        self._mpu6050_bias_g = float(np.clip(
+            self._mpu6050_bias_g + self.rng.normal(0.0, 0.002 * noise_scale), -0.08, 0.08
+        ))
+        hx_noise = self.rng.normal(0.0, 2.0 * noise_scale)
+        mpu_jitter = self.rng.normal(0.0, 0.03 * noise_scale)
+        distance_cm = dynamics["true_distance_cm"] + self.rng.normal(0.0, 0.35 * noise_scale)
+        weight_kg = dynamics["true_weight_kg"] + self._hx711_drift_kg + hx_noise
+        vibration_g = dynamics["true_vibration_g"] + self._mpu6050_bias_g + mpu_jitter
+        flow_tph = dynamics["flow_tph"] + self.rng.normal(0.0, 2.0 * noise_scale)
+
+        selected_fault = None
+        dropout = False
+        if is_fault:
+            selected_fault = fault_type or self.random.choice([
+                "signal_dropout", "resonance_surge", "inverted_physics", "load_cell_drift"
+            ])
+            if selected_fault == "signal_dropout":
+                dropout = True
+                distance_cm, weight_kg, vibration_g, flow_tph = 0.0, 0.0, 0.0, 0.0
+            elif selected_fault == "resonance_surge":
+                vibration_g = 12.5 + self.rng.normal(0.0, 1.5 * noise_scale)
+            elif selected_fault == "inverted_physics":
+                distance_cm = 5.0 + self.rng.normal(0.0, 0.8 * noise_scale)
+                weight_kg = 25.0 + self.rng.normal(0.0, 4.0 * noise_scale)
+                vibration_g = 4.0 + self.rng.normal(0.0, 0.4 * noise_scale)
+                flow_tph = 200.0 + self.rng.normal(0.0, 15.0 * noise_scale)
+            elif selected_fault == "load_cell_drift":
+                weight_kg = 1350.0 + self.rng.normal(0.0, 25.0 * noise_scale)
+                vibration_g = 6.2 + self.rng.normal(0.0, 0.25 * noise_scale)
+            else:
+                raise ValueError(f"Unknown fault_type: {selected_fault}")
+
+        distance_cm = _quantize(float(np.clip(distance_cm, 0.0, CHUTE_HEIGHT_CM)), ULTRASONIC_RESOLUTION_CM)
+        weight_kg = _quantize(float(np.clip(weight_kg, 0.0, MAX_LOAD_CAPACITY_KG)), HX711_RESOLUTION_KG)
+        vibration_g = _quantize(float(np.clip(vibration_g, 0.0, 15.0)), MPU6050_RESOLUTION_G)
+        flow_tph = _quantize(float(np.clip(flow_tph, 0.0, 500.0)), FLOW_RESOLUTION_TPH)
+
+        ratio_x, ratio_y = self.random.uniform(0.30, 0.50), self.random.uniform(0.30, 0.50)
+        ratio_z = np.sqrt(max(0.01, 1.0 - ratio_x**2 - ratio_y**2))
+        vibration_x = _quantize(vibration_g * ratio_x + self.rng.normal(0, 0.02 * noise_scale), MPU6050_RESOLUTION_G)
+        vibration_y = _quantize(vibration_g * ratio_y + self.rng.normal(0, 0.02 * noise_scale), MPU6050_RESOLUTION_G)
+        vibration_z = _quantize(vibration_g * ratio_z + self.rng.normal(0, 0.02 * noise_scale), MPU6050_RESOLUTION_G)
+
+        return {
+            "distance_cm": distance_cm, "weight_kg": weight_kg, "vibration_g": vibration_g,
+            "vibration_x": vibration_x, "vibration_y": vibration_y, "vibration_z": vibration_z,
+            "material_flow_rate_tph": flow_tph, "state_label": state if state < 3 else 0,
+            "is_anomaly": int(is_fault), "fault_type": selected_fault or "none",
+            "signal_dropout": dropout, "bed_height_cm": round(dynamics["bed_height_cm"], 3),
+            "true_distance_cm": round(dynamics["true_distance_cm"], 3),
+            "true_weight_kg": round(dynamics["true_weight_kg"], 3),
+            "gravity_accel_mps2": GRAVITY_MPS2,
+            "friction_angle_deg": round(dynamics["friction_angle_deg"], 3),
+            "effective_accel_mps2": round(dynamics["effective_accel_mps2"], 5),
+            "ore_velocity_mps": round(dynamics["ore_velocity_mps"], 5),
+            "hx711_electrical_noise_kg": round(float(hx_noise), 4),
+            "hx711_drift_kg": round(self._hx711_drift_kg, 4),
+            "mpu6050_bias_g": round(self._mpu6050_bias_g, 5),
+            "mpu6050_jitter_g": round(float(mpu_jitter), 5),
+        }
+
+    def generate_dataset(self, n_samples: int = 20000) -> pd.DataFrame:
+        """Generate records across all operational states (20,000 by default)."""
+        if n_samples <= 0:
+            raise ValueError("n_samples must be positive")
+        counts = {0: int(n_samples * 0.60), 1: int(n_samples * 0.22), 2: int(n_samples * 0.13)}
+        counts[3] = n_samples - sum(counts.values())
+        records = [self.generate_sample(state) for state, count in counts.items() for _ in range(count)]
+        return pd.DataFrame(records).sample(frac=1.0, random_state=42).reset_index(drop=True)
+
 
 if __name__ == "__main__":
-    generator = ChutePhysicsGenerator()
-    df = generator.generate_dataset(n_samples=1000)
-    print("✅ Sample Dataset Generated:")
-    print(df.head(10))
-    print("\nClass distribution:\n", df['state_label'].value_counts())
-    print("\nAnomaly distribution:\n", df['is_anomaly'].value_counts())
-
+    print(ChutePhysicsGenerator().generate_dataset().head())

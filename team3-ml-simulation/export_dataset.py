@@ -9,7 +9,9 @@ from data_generator import ChutePhysicsGenerator
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 
-def export_synthetic_datasets(n_samples: int = 10000):
+def export_synthetic_datasets(n_samples: int = 20000):
+    if n_samples < 20000:
+        raise ValueError("Export at least 20,000 records to satisfy the project plan")
     generator = ChutePhysicsGenerator(seed=42)
     df = generator.generate_dataset(n_samples=n_samples)
 
@@ -25,4 +27,3 @@ def export_synthetic_datasets(n_samples: int = 10000):
 
 if __name__ == "__main__":
     export_synthetic_datasets()
-
