@@ -54,8 +54,8 @@ echo -e "${GREEN}✓ All dependencies satisfied.${NC}"
 
 # 3. Train / Verify ML Models
 echo -e "\n${YELLOW}[3/4] Verifying Machine Learning Model Artifacts...${NC}"
-MODEL_FILE="$ROOT_DIR/team3-ml-simulation/models/chute_random_forest.joblib"
-if [ ! -f "$MODEL_FILE" ]; then
+MODEL_DIR="$ROOT_DIR/team3-ml-simulation/models"
+if [ ! -f "$MODEL_DIR/chute_random_forest.joblib" ] || [ ! -f "$MODEL_DIR/chute_isolation_forest.joblib" ] || [ ! -f "$MODEL_DIR/scaler.joblib" ]; then
     echo -e "${YELLOW}🧠 Pre-trained models not detected. Training Isolation Forest & Random Forest now...${NC}"
     $PYTHON_BIN "$ROOT_DIR/team3-ml-simulation/train_models.py"
 else
