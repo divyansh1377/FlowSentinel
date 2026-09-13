@@ -114,87 +114,38 @@ class ChutePhysicsGenerator:
             "is_anomaly": 1 if state == 3 else 0
         }
 
-    def generate_continuous_trajectory(self, n_steps: int = 5000, transition_prob: float = 0.02) -> pd.DataFrame:
+    def generate_dataset(self, n_samples: int = 15000) -> pd.DataFrame:
         """
-        Generate continuous-time Markov random walk trajectory simulating real chute operational physics.
-        Models smooth physical transitions across operational states:
-        State 0 (Normal) <--> State 1 (Buildup) <--> State 2 (Blockage)
-        plus occasional out-of-distribution State 3 anomalies.
+        Generate a balanced training dataset with realistic operational proportions:
+        - 60% Normal Flow (State 0)
+        - 22% Warning Buildup (State 1)
+        - 13% Critical Blockage (State 2)
+        - 5% Out-of-distribution Anomalies (State 3)
         """
         records = []
-        current_state = 0
-        
-        # Continuous state state-transition probability matrix
-        # States: 0=Normal, 1=Warning, 2=Blockage, 3=Anomaly
-        transition_matrix = {
-            0: [0.980, 0.017, 0.001, 0.002],
-            1: [0.030, 0.940, 0.028, 0.002],
-            2: [0.005, 0.045, 0.948, 0.002],
-            3: [0.150, 0.050, 0.000, 0.800]
-        }
+        n_normal = int(n_samples * 0.60)
+        n_warning = int(n_samples * 0.22)
+        n_blockage = int(n_samples * 0.13)
+        n_anomalies = n_samples - (n_normal + n_warning + n_blockage)
 
-        for _ in range(n_steps):
-            records.append(self.generate_sample(state=current_state, inject_noise=True))
-            probs = transition_matrix[current_state]
-            current_state = int(np.random.choice([0, 1, 2, 3], p=probs))
+        for _ in range(n_normal):
+            records.append(self.generate_sample(state=0))
+        for _ in range(n_warning):
+            records.append(self.generate_sample(state=1))
+        for _ in range(n_blockage):
+            records.append(self.generate_sample(state=2))
+        for _ in range(n_anomalies):
+            records.append(self.generate_sample(state=3))
 
-        return pd.DataFrame(records)
-
-    def generate_dataset(self, n_samples: int = 20000, use_markov: bool = True) -> pd.DataFrame:
-        """
-        Generate training dataset. When use_markov=True, incorporates continuous
-        Markov chain physics trajectories to capture dynamic transition states without boundary leakage.
-        """
-        if use_markov:
-            # 70% continuous Markov walk, 30% stratified edge cases for comprehensive coverage
-            n_markov = int(n_samples * 0.70)
-            n_stratified = n_samples - n_markov
-
-            df_markov = self.generate_continuous_trajectory(n_steps=n_markov)
-
-            n_normal = int(n_stratified * 0.50)
-            n_warning = int(n_stratified * 0.25)
-            n_blockage = int(n_stratified * 0.15)
-            n_anomalies = n_stratified - (n_normal + n_warning + n_blockage)
-
-            strat_records = []
-            for _ in range(n_normal):
-                strat_records.append(self.generate_sample(state=0))
-            for _ in range(n_warning):
-                strat_records.append(self.generate_sample(state=1))
-            for _ in range(n_blockage):
-                strat_records.append(self.generate_sample(state=2))
-            for _ in range(n_anomalies):
-                strat_records.append(self.generate_sample(state=3))
-
-            df_strat = pd.DataFrame(strat_records)
-            df = pd.concat([df_markov, df_strat], ignore_index=True)
-        else:
-            records = []
-            n_normal = int(n_samples * 0.60)
-            n_warning = int(n_samples * 0.22)
-            n_blockage = int(n_samples * 0.13)
-            n_anomalies = n_samples - (n_normal + n_warning + n_blockage)
-
-            for _ in range(n_normal):
-                records.append(self.generate_sample(state=0))
-            for _ in range(n_warning):
-                records.append(self.generate_sample(state=1))
-            for _ in range(n_blockage):
-                records.append(self.generate_sample(state=2))
-            for _ in range(n_anomalies):
-                records.append(self.generate_sample(state=3))
-
-            df = pd.DataFrame(records)
-
+        df = pd.DataFrame(records)
         # Shuffle dataset
         df = df.sample(frac=1.0, random_state=42).reset_index(drop=True)
         return df
 
 if __name__ == "__main__":
     generator = ChutePhysicsGenerator()
-    df = generator.generate_dataset(n_samples=1000, use_markov=True)
-    print("Dataset Generated with Markov Chain Transitions:")
+    df = generator.generate_dataset(n_samples=1000)
+    print("✅ Sample Dataset Generated:")
     print(df.head(10))
     print("\nClass distribution:\n", df['state_label'].value_counts())
     print("\nAnomaly distribution:\n", df['is_anomaly'].value_counts())
