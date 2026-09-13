@@ -9,11 +9,12 @@ import sys
 import os
 import time
 import asyncio
+import logging
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, Path
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
@@ -32,12 +33,20 @@ from schemas import (
     TelemetryPayload,
     PredictionResponse,
     SystemStatusResponse,
-    AlertEvent
+    AlertEvent,
+    AlertAcknowledgeRequest,
+    AlertAcknowledgeResponse
 )
 from websocket_manager import ws_hub
 from alert_dispatcher import alert_dispatcher
 from simulator_service import simulator_service
 from model_pipeline import ChutePredictor
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+)
+logger = logging.getLogger("FlowSentinel.Main")
 
 # Initialize Machine Learning Engine
 predictor = ChutePredictor(models_dir=os.path.join(ML_DIR, "models"))
@@ -46,12 +55,12 @@ START_TIME = time.time()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: Initialize background simulator & predictor
-    print("🚀 [FastAPI] Initializing FlowSentinel Backend Engine...")
+    logger.info("🚀 [FastAPI] Initializing FlowSentinel Backend Engine...")
     simulator_service.initialize(predictor, alert_dispatcher)
     sim_task = asyncio.create_task(simulator_service.start_loop())
     yield
     # Shutdown
-    print("🛑 [FastAPI] Shutting down FlowSentinel Backend Engine...")
+    logger.info("🛑 [FastAPI] Shutting down FlowSentinel Backend Engine...")
     simulator_service.stop()
     sim_task.cancel()
 
@@ -88,7 +97,7 @@ async def get_system_status():
             "random_forest": "Trained (v1.0)" if predictor.is_loaded else "Heuristic Fallback",
             "isolation_forest": "Trained (v1.0)" if predictor.is_loaded else "Heuristic Fallback"
         },
-        "active_websocket_clients": len(ws_hub.active_connections),
+        "active_websocket_clients": ws_hub.client_count,
         "uptime_seconds": round(time.time() - START_TIME, 1),
         "active_mode": simulator_service.mode
     }
@@ -106,7 +115,7 @@ async def process_telemetry(payload: TelemetryPayload):
     }
 
     prediction = predictor.predict(sample_dict)
-    prediction["timestamp"] = payload.timestamp or datetime.utcnow().isoformat()
+    prediction["timestamp"] = payload.timestamp or datetime.now(timezone.utc).isoformat()
     prediction["chute_id"] = payload.chute_id or "CHUTE_BLAST_FURNACE_01"
 
     # Evaluate alerts
@@ -172,6 +181,40 @@ async def get_alerts(limit: int = Query(50, ge=1, le=200)):
     """
     return alert_dispatcher.get_history(limit=limit)
 
+@app.post("/api/alerts/{alert_id}/acknowledge", response_model=AlertAcknowledgeResponse, tags=["Alerts"])
+async def acknowledge_alert(alert_id: str = Path(...), body: Optional[AlertAcknowledgeRequest] = None):
+    """
+    Acknowledge a specific alert by ID.
+    """
+    success = alert_dispatcher.acknowledge_alert(alert_id)
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Alert with ID {alert_id} not found.")
+    
+    # Broadcast acknowledgement to WebSocket clients
+    await ws_hub.broadcast_json("ALERT_ACKNOWLEDGED", {
+        "alert_id": alert_id,
+        "acknowledged_by": body.acknowledged_by if body else "operator",
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+    
+    return {
+        "status": "success",
+        "alert_id": alert_id,
+        "acknowledged": True,
+        "message": f"Alert {alert_id} has been acknowledged."
+    }
+
+@app.delete("/api/alerts", tags=["Alerts"])
+async def clear_alerts():
+    """
+    Clear alert history (useful for reset and testing).
+    """
+    alert_dispatcher.clear_history()
+    await ws_hub.broadcast_json("ALERTS_CLEARED", {
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+    return {"status": "success", "message": "Alert history cleared."}
+
 @app.post("/api/retrain", tags=["Machine Learning"])
 async def trigger_retrain():
     """
@@ -183,6 +226,7 @@ async def trigger_retrain():
         predictor.load_models()
         return {"status": "success", "message": "Models successfully retrained and reloaded into memory.", "metadata": meta}
     except Exception as e:
+        logger.error(f"Failed to retrain models: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to retrain models: {str(e)}")
 
 # ---------------------------------------------------------
@@ -200,7 +244,7 @@ async def websocket_telemetry_endpoint(websocket: WebSocket):
         await ws_hub.send_direct_json(websocket, "HANDSHAKE", {
             "status": "connected",
             "ml_loaded": predictor.is_loaded,
-            "server_time": datetime.utcnow().isoformat()
+            "server_time": datetime.now(timezone.utc).isoformat()
         })
 
         while True:
@@ -217,11 +261,11 @@ async def websocket_telemetry_endpoint(websocket: WebSocket):
                     prediction["timestamp"] = datetime.now(timezone.utc).isoformat()
                     prediction["chute_id"] = payload.get("chute_id", "CHUTE_BLAST_FURNACE_01")
 
-                    # Broadcast telemetry prediction to all connected dashboards
-                    await ws_hub.broadcast_json("TELEMETRY_PREDICTION", prediction)
-
-                    # Check alerts (dispatches CRITICAL_ALERT if threshold breached)
+                    # Check alerts
                     await alert_dispatcher.evaluate_prediction(prediction, prediction["chute_id"])
+
+                    # Broadcast result to all connected dashboards
+                    await ws_hub.broadcast_json("TELEMETRY_PREDICTION", prediction)
 
                 elif msg_type == "SET_SIMULATION_MODE":
                     # Switch between manual sliders and auto-streamer
@@ -235,16 +279,28 @@ async def websocket_telemetry_endpoint(websocket: WebSocket):
                         "interval_ms": interval_ms
                     })
 
+                elif msg_type == "ACKNOWLEDGE_ALERT":
+                    alert_id = payload.get("alert_id")
+                    if alert_id:
+                        alert_dispatcher.acknowledge_alert(alert_id)
+                        await ws_hub.broadcast_json("ALERT_ACKNOWLEDGED", {
+                            "alert_id": alert_id,
+                            "timestamp": datetime.now(timezone.utc).isoformat()
+                        })
+
                 elif msg_type == "PING":
-                    await ws_hub.send_direct_json(websocket, "PONG", {"time": time.time()})
+                    await ws_hub.send_direct_json(websocket, "PONG", {
+                        "time": time.time(),
+                        "server_time": datetime.now(timezone.utc).isoformat()
+                    })
 
             except Exception as parse_err:
-                print(f"⚠️ [WebSocket] Message processing error: {parse_err}")
+                logger.warning(f"⚠️ [WebSocket] Message processing error: {parse_err}")
 
     except WebSocketDisconnect:
         ws_hub.disconnect(websocket)
     except Exception as e:
-        print(f"⚠️ [WebSocket] Unexpected connection drop: {e}")
+        logger.warning(f"⚠️ [WebSocket] Unexpected connection drop: {e}")
         ws_hub.disconnect(websocket)
 
 # ---------------------------------------------------------
@@ -265,4 +321,3 @@ async def serve_index():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host=settings.HOST, port=settings.PORT, reload=settings.DEBUG)
-

@@ -9,13 +9,16 @@ physics-based sensor data and pushes real-time inferences through WebSockets.
 import sys
 import os
 import asyncio
-from datetime import datetime
+import logging
+from datetime import datetime, timezone
 
 # Allow importing from team3-ml-simulation
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "team3-ml-simulation"))
 
 from data_generator import ChutePhysicsGenerator
 from websocket_manager import ws_hub
+
+logger = logging.getLogger("FlowSentinel.SimulatorService")
 
 class LiveSimulatorService:
     def __init__(self):
@@ -36,11 +39,11 @@ class LiveSimulatorService:
         self.mode = mode
         self.preset = preset
         self.interval_seconds = max(0.1, interval_ms / 1000.0)
-        print(f"🔄 [SimulatorService] Mode set to: {self.mode} (Preset: {self.preset}, Interval: {self.interval_seconds}s)")
+        logger.info(f"🔄 [SimulatorService] Mode set to: {self.mode} (Preset: {self.preset}, Interval: {self.interval_seconds}s)")
 
     async def start_loop(self):
         self.is_running = True
-        print("▶️ [SimulatorService] Background simulation loop started.")
+        logger.info("▶️ [SimulatorService] Background simulation loop started.")
         while self.is_running:
             try:
                 if self.mode == "auto" and ws_hub.active_connections and self.predictor:
@@ -58,7 +61,7 @@ class LiveSimulatorService:
                     
                     # Run inference
                     prediction = self.predictor.predict(raw_sample)
-                    prediction["timestamp"] = datetime.utcnow().isoformat()
+                    prediction["timestamp"] = datetime.now(timezone.utc).isoformat()
                     prediction["chute_id"] = "CHUTE_BLAST_FURNACE_01"
 
                     # Evaluate alert
@@ -72,11 +75,10 @@ class LiveSimulatorService:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                print(f"⚠️ [SimulatorService] Error in loop: {e}")
+                logger.error(f"⚠️ [SimulatorService] Error in loop: {e}")
                 await asyncio.sleep(1.0)
 
     def stop(self):
         self.is_running = False
 
 simulator_service = LiveSimulatorService()
-

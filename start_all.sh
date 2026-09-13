@@ -25,7 +25,11 @@ cd "$ROOT_DIR"
 
 # 1. Check Python / Virtual Environment
 echo -e "${YELLOW}[1/4] Checking Python Environment...${NC}"
-if [ -d "$ROOT_DIR/venv" ]; then
+if [ -d "$ROOT_DIR/.venv" ]; then
+    PYTHON_BIN="$ROOT_DIR/.venv/bin/python"
+    PIP_BIN="$ROOT_DIR/.venv/bin/pip"
+    echo -e "${GREEN}✓ Using virtual environment at ./.venv${NC}"
+elif [ -d "$ROOT_DIR/venv" ]; then
     PYTHON_BIN="$ROOT_DIR/venv/bin/python"
     PIP_BIN="$ROOT_DIR/venv/bin/pip"
     echo -e "${GREEN}✓ Using virtual environment at ./venv${NC}"
