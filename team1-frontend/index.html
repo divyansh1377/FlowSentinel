@@ -3,218 +3,260 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FlowSentinel - AI Chute Blockage Detection SCADA</title>
+  <title>FlowSentinel - Predictive Chute Blockage Management</title>
   
   <!-- CSS Stylesheets -->
-  <link rel="stylesheet" href="/static/css/styles.css">
+  <link rel="stylesheet" href="css/styles.css">
   
   <!-- Chart.js via CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
 
-  <!-- Top SCADA Navigation Bar -->
-  <header class="header">
-    <div class="logo-container">
-      <div class="logo-icon">🛡️</div>
-      <div class="title-group">
-        <h1>FlowSentinel SCADA</h1>
-        <span>AI-Powered Chute Blockage & Anomaly Detection • Blast Furnace 01</span>
-      </div>
+  <div id="app-root">
+    <!-- Shared Sidebar Container -->
+    <div id="sidebar-container"></div>
+
+    <!-- Main Content Area -->
+    <div class="fs-main-wrapper">
+      <!-- Shared Header Container -->
+      <div id="header-container"></div>
+
+      <!-- Main Dashboard Viewport -->
+      <main class="fs-content">
+
+        <!-- 1. Hero Overview Section -->
+        <section class="hero-banner">
+          <div class="hero-content">
+            <h2>FlowSentinel</h2>
+            <p>Predictive Chute Blockage Management • Real-time AI-driven telemetric monitoring and multi-sensor fusion for industrial gravity-fed ore transfer chutes.</p>
+          </div>
+          <div class="hero-actions">
+            <a href="monitoring.html" class="btn btn-primary">📡 Start Live Monitoring</a>
+            <a href="simulation.html" class="btn btn-secondary">🎛️ Open Simulation</a>
+            <a href="manual.html" class="btn btn-secondary">🧪 Run Manual Prediction</a>
+          </div>
+        </section>
+
+        <!-- 2. System Status & Blockage Risk Alert Banner -->
+        <section id="status-banner" class="status-banner normal">
+          <div class="status-main">
+            <div id="status-icon" class="status-indicator-icon">✅</div>
+            <div class="status-text-group">
+              <h3 id="status-title">NORMAL DYNAMIC MATERIAL FLOW</h3>
+              <p id="status-diagnosis">Dynamic equilibrium flow. Clearance and vibration signatures within nominal bounds.</p>
+              <p id="status-recommendation" style="color: var(--fs-accent-cyan); font-weight: 600; margin-top: 0.25rem;">Action: Maintain standard operating feed rate.</p>
+            </div>
+          </div>
+
+          <div class="metrics-summary" style="display: flex; gap: 1.5rem; text-align: right;">
+            <div>
+              <div style="font-size: 0.7rem; color: var(--fs-text-muted); text-transform: uppercase; font-weight: 700;">Blockage Risk</div>
+              <div id="banner-risk-val" style="font-size: 1.6rem; font-weight: 800; font-family: var(--fs-font-mono); color: var(--fs-status-normal);">12.5%</div>
+            </div>
+            <div>
+              <div style="font-size: 0.7rem; color: var(--fs-text-muted); text-transform: uppercase; font-weight: 700;">Prediction Confidence</div>
+              <div id="banner-confidence-val" style="font-size: 1.6rem; font-weight: 800; font-family: var(--fs-font-mono);">96.5%</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 3. KPI Metric Cards -->
+        <section class="kpi-grid">
+          <div id="kpi-risk-card" class="kpi-card normal">
+            <div class="kpi-label">Blockage Risk</div>
+            <div class="kpi-value-row">
+              <div id="kpi-risk-value" class="kpi-value">12.5%</div>
+              <span id="kpi-risk-badge" class="badge normal">NORMAL</span>
+            </div>
+            <div class="kpi-subtext">Trend: <span style="color: var(--fs-status-normal); font-weight: 600;">▼ STABLE</span></div>
+          </div>
+
+          <div class="kpi-card normal">
+            <div class="kpi-label">Prediction Confidence</div>
+            <div class="kpi-value-row">
+              <div id="kpi-confidence-value" class="kpi-value">96.5%</div>
+              <span class="badge normal">OPTIMAL</span>
+            </div>
+            <div class="kpi-subtext">Inference Latency: <span id="kpi-latency-value" style="font-family: var(--fs-font-mono);">12.4 ms</span></div>
+          </div>
+
+          <div id="kpi-chute-card" class="kpi-card normal">
+            <div class="kpi-label">Chute Status</div>
+            <div class="kpi-value-row">
+              <div id="kpi-chute-value" class="kpi-value" style="font-size: 1.35rem;">NORMAL</div>
+              <span id="kpi-state-code" class="badge normal">STATE 0</span>
+            </div>
+            <div class="kpi-subtext">Material Flow: <span id="kpi-flow-rate">240 TPH</span></div>
+          </div>
+
+          <div id="kpi-system-card" class="kpi-card normal">
+            <div class="kpi-label">System Status</div>
+            <div class="kpi-value-row">
+              <div id="kpi-system-value" class="kpi-value" style="font-size: 1.35rem; color: var(--fs-status-online);">ONLINE</div>
+              <span class="badge online">WS CONNECTED</span>
+            </div>
+            <div class="kpi-subtext">Anomaly Detector: <span id="kpi-anomaly-tag" style="color: var(--fs-status-normal); font-weight: 600;">HEALTHY</span></div>
+          </div>
+        </section>
+
+        <!-- 4. Live Sensor Panel (4 Sensors) -->
+        <section class="card">
+          <div class="card-header">
+            <h3>📡 Live Sensor Telemetry Stream</h3>
+            <span class="badge" style="font-family: var(--fs-font-mono);">SAMPLING: 2 Hz</span>
+          </div>
+
+          <div class="sensor-grid">
+            <div class="sensor-card">
+              <div class="sensor-card-header">
+                <span class="sensor-title">📐 Clearance Distance</span>
+                <span class="badge normal" id="badge-sensor-dist">ACTIVE</span>
+              </div>
+              <div class="sensor-value-group">
+                <span id="sensor-val-dist" class="sensor-value">52.0</span>
+                <span class="sensor-unit">cm</span>
+              </div>
+              <div class="sensor-meta-row">
+                <span>Ultrasonic HC-SR04</span>
+                <span>Nominal: 40-70 cm</span>
+              </div>
+            </div>
+
+            <div class="sensor-card">
+              <div class="sensor-card-header">
+                <span class="sensor-title">⚖️ Load Cell Mass</span>
+                <span class="badge normal" id="badge-sensor-weight">ACTIVE</span>
+              </div>
+              <div class="sensor-value-group">
+                <span id="sensor-val-weight" class="sensor-value">320</span>
+                <span class="sensor-unit">kg</span>
+              </div>
+              <div class="sensor-meta-row">
+                <span>HX711 Strain Gauge</span>
+                <span>Nominal: &lt; 500 kg</span>
+              </div>
+            </div>
+
+            <div class="sensor-card">
+              <div class="sensor-card-header">
+                <span class="sensor-title">📳 Vibration RMS</span>
+                <span class="badge normal" id="badge-sensor-vib">ACTIVE</span>
+              </div>
+              <div class="sensor-value-group">
+                <span id="sensor-val-vib" class="sensor-value">3.40</span>
+                <span class="sensor-unit">G</span>
+              </div>
+              <div class="sensor-meta-row">
+                <span>MPU6050 3-Axis</span>
+                <span>Nominal: 2.0-5.0 G</span>
+              </div>
+            </div>
+
+            <div class="sensor-card">
+              <div class="sensor-card-header">
+                <span class="sensor-title">⚡ Motor Current</span>
+                <span class="badge normal" id="badge-sensor-current">ACTIVE</span>
+              </div>
+              <div class="sensor-value-group">
+                <span id="sensor-val-current" class="sensor-value">42.5</span>
+                <span class="sensor-unit">A</span>
+              </div>
+              <div class="sensor-meta-row">
+                <span>Feeder Drive Motor</span>
+                <span>Max: 80.0 A</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 5. Split Section: Risk vs Time Chart & Chute Digital Twin & Event Audit Log -->
+        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1.25rem;">
+          
+          <!-- Risk vs Time Chart -->
+          <section class="card">
+            <div class="card-header">
+              <h3>📈 Blockage Risk vs Time</h3>
+              <div class="card-header-actions">
+                <button id="btn-chart-pause" class="btn btn-secondary btn-icon" title="Pause Chart">⏸️</button>
+                <button id="btn-chart-clear" class="btn btn-secondary btn-icon" title="Clear History">🗑️</button>
+              </div>
+            </div>
+            <div style="position: relative; height: 260px; width: 100%;">
+              <canvas id="riskTimeChart"></canvas>
+            </div>
+          </section>
+
+          <!-- Chute Digital Twin -->
+          <section class="card">
+            <div class="card-header">
+              <h3>🏗️ Chute Digital Twin</h3>
+              <span id="chute-bed-label" style="font-size: 0.78rem; color: var(--fs-accent-cyan); font-weight: 700;">Fill: 25% (320 kg)</span>
+            </div>
+            
+            <div class="chute-twin-wrapper">
+              <div class="chute-graphic">
+                <div class="chute-sensor-marker">▲ ULTRASONIC</div>
+                <div id="chute-bed-level" class="chute-bed-level"></div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <!-- 6. Quick Action Navigation & Recent Audit Events -->
+        <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 1.25rem;">
+          
+          <!-- Quick Actions -->
+          <section class="card">
+            <div class="card-header">
+              <h3>⚡ Quick Navigation</h3>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 0.6rem;">
+              <a href="monitoring.html" class="btn btn-secondary" style="justify-content: flex-start;">
+                <span>📡</span> Start Live Monitoring
+              </a>
+              <a href="simulation.html" class="btn btn-secondary" style="justify-content: flex-start;">
+                <span>🎛️</span> Open Simulation Testbed
+              </a>
+              <a href="manual.html" class="btn btn-secondary" style="justify-content: flex-start;">
+                <span>🧪</span> Run Manual Prediction
+              </a>
+              <a href="analytics.html" class="btn btn-secondary" style="justify-content: flex-start;">
+                <span>📊</span> View Model Analytics
+              </a>
+            </div>
+          </section>
+
+          <!-- Recent Events -->
+          <section class="card">
+            <div class="card-header">
+              <h3>🚨 Recent System Events & Alerts</h3>
+              <span class="badge" style="font-size: 0.7rem;">Auto-Debounced</span>
+            </div>
+            <div id="alert-log-list" class="alert-log-list">
+              <div class="alert-item">
+                <div class="alert-item-header">
+                  <span>System Boot</span>
+                  <span>FLOWSENTINEL-SYS-01</span>
+                </div>
+                <div class="alert-item-title">FlowSentinel Monitoring Engine Initialized</div>
+                <div style="font-size: 0.75rem; color: var(--fs-text-secondary);">Listening for telemetry stream on /ws/telemetry.</div>
+              </div>
+            </div>
+          </section>
+
+        </div>
+
+      </main>
     </div>
+  </div>
 
-    <div class="system-status-pills">
-      <button id="toggle-sound" class="badge" style="cursor: pointer;">🔇 ALARM: OFF</button>
-      <div id="ws-status-badge" class="badge">
-        <span class="pulse-dot"></span>
-        <span id="ws-status-text">CONNECTING...</span>
-      </div>
-    </div>
-  </header>
-
-  <!-- Master Grid Container -->
-  <main class="dashboard-container">
-
-    <!-- 1. Live Chute Status Banner (Full Width) -->
-    <section id="status-banner" class="status-banner normal">
-      <div class="status-main">
-        <div id="status-icon" class="status-indicator-icon">✅</div>
-        <div class="status-text-group">
-          <h3 id="status-title">NORMAL DYNAMIC MATERIAL FLOW</h3>
-          <p id="status-diagnosis">Dynamic equilibrium flow. Kinetic impact frequency and clearance within nominal bounds.</p>
-          <p id="status-recommendation" style="color: var(--color-cyan); font-weight: 600; margin-top: 0.3rem;">Action: Maintain standard operating feed rate.</p>
-        </div>
-      </div>
-
-      <div class="metrics-summary">
-        <div class="metric-item">
-          <div class="label">AI Confidence</div>
-          <div id="metric-confidence" class="value" style="color: var(--color-normal);">96.5%</div>
-        </div>
-        <div class="metric-item">
-          <div class="label">Inference Latency</div>
-          <div id="metric-latency" class="value">12.4 ms</div>
-        </div>
-        <div class="metric-item">
-          <div class="label">Isolation Forest</div>
-          <div id="metric-anomaly" class="value" style="color: var(--color-normal);">NORMAL</div>
-        </div>
-      </div>
-    </section>
-
-    <!-- 2. Left Column: Simulation Controls & Presets -->
-    <aside class="card">
-      <div class="card-header">
-        <h2>🎛️ Simulation Controls</h2>
-        <span id="sim-mode-label" style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted);">MANUAL SLIDERS</span>
-      </div>
-
-      <!-- Mode Toggle Switch -->
-      <div class="toggle-switch-row">
-        <span style="font-size: 0.85rem; color: var(--text-secondary);">Auto Physics Streamer</span>
-        <label style="position: relative; display: inline-block; width: 44px; height: 24px;">
-          <input type="checkbox" id="toggle-sim-mode" style="opacity: 0; width: 0; height: 0;">
-          <span style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #334155; transition: .3s; border-radius: 24px;"></span>
-        </label>
-      </div>
-
-      <!-- Sliders -->
-      <div class="control-group">
-        <div class="control-label-row">
-          <span>Ultrasonic Clearance ($d$)</span>
-          <span id="val-distance" class="control-value">55.0 cm</span>
-        </div>
-        <input type="range" id="slider-distance" min="2" max="120" step="1" value="55">
-      </div>
-
-      <div class="control-group">
-        <div class="control-label-row">
-          <span>HX711 Load Cell ($W$)</span>
-          <span id="val-weight" class="control-value">320 kg</span>
-        </div>
-        <input type="range" id="slider-weight" min="0" max="1500" step="10" value="320">
-      </div>
-
-      <div class="control-group">
-        <div class="control-label-row">
-          <span>MPU6050 Vibration ($G$)</span>
-          <span id="val-vibration" class="control-value">3.20 G</span>
-        </div>
-        <input type="range" id="slider-vibration" min="0.0" max="15.0" step="0.1" value="3.2">
-      </div>
-
-      <div class="control-group">
-        <div class="control-label-row">
-          <span>Feed Rate Throughput</span>
-          <span id="val-flow" class="control-value">240 TPH</span>
-        </div>
-        <input type="range" id="slider-flow" min="0" max="500" step="10" value="240">
-      </div>
-
-      <!-- Industrial Test Presets -->
-      <div style="margin-top: 0.5rem;">
-        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem; text-transform: uppercase;">Standard Test Scenarios</div>
-        <div class="preset-grid">
-          <button class="btn-preset active" data-preset="NORMAL_FLOW">🟢 Normal Flow</button>
-          <button class="btn-preset" data-preset="RISING_BUILDUP">🟡 Buildup Warning</button>
-          <button class="btn-preset" data-preset="COMPLETE_BLOCKAGE">🔴 Critical Jam</button>
-          <button class="btn-preset" data-preset="ERRATIC_SENSOR_SPIKE">⚡ Sensor Anomaly</button>
-          <button class="btn-preset" data-preset="EMPTY_CHUTE" style="grid-column: span 2;">⚪ Empty Chute Idle</button>
-        </div>
-      </div>
-    </aside>
-
-    <!-- 3. Center Column: Real-time Trend Charts & Digital Twin -->
-    <section class="card" style="display: flex; flex-direction: column;">
-      <div class="card-header">
-        <h2>📈 Live Multi-Sensor Telemetry Trends</h2>
-        <span style="font-size: 0.75rem; color: var(--text-muted);">Sampling: Real-Time Stream</span>
-      </div>
-
-      <!-- Real-time Chart -->
-      <div style="position: relative; height: 260px; width: 100%;">
-        <canvas id="telemetryChart"></canvas>
-      </div>
-
-      <!-- Chute Digital Twin Cross-Section -->
-      <div style="margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 0.8rem;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-          <h3 style="font-size: 0.9rem; font-weight: 600;">🏗️ Chute Digital Twin Cross-Section</h3>
-          <span id="chute-bed-label" style="font-size: 0.8rem; color: var(--color-cyan);">Fill: 25% (320 kg)</span>
-        </div>
-
-        <div class="chute-twin-container">
-          <div class="chute-graphic">
-            <div class="chute-sensor-marker">▲ ULTRASONIC</div>
-            <div id="chute-bed-level" class="chute-bed-level"></div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- 4. Right Column: Probabilities & Alert Audit Log -->
-    <section class="card right-column">
-      <div class="card-header">
-        <h2>🎯 AI Model Diagnostics</h2>
-      </div>
-
-      <!-- Random Forest Probabilities -->
-      <div>
-        <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.5rem;">Random Forest Probabilities</div>
-
-        <div class="prob-row">
-          <div class="prob-header">
-            <span>Normal Dynamic Flow (0)</span>
-            <span id="prob-normal-val" style="color: var(--color-normal); font-weight: 700;">96.5%</span>
-          </div>
-          <div class="progress-track">
-            <div id="prob-normal-bar" class="progress-fill normal" style="width: 96.5%;"></div>
-          </div>
-        </div>
-
-        <div class="prob-row">
-          <div class="prob-header">
-            <span>Flow Restriction / Warning (1)</span>
-            <span id="prob-warning-val" style="color: var(--color-warning); font-weight: 700;">3.0%</span>
-          </div>
-          <div class="progress-track">
-            <div id="prob-warning-bar" class="progress-fill warning" style="width: 3.0%;"></div>
-          </div>
-        </div>
-
-        <div class="prob-row">
-          <div class="prob-header">
-            <span>Critical Chute Choke (2)</span>
-            <span id="prob-blockage-val" style="color: var(--color-blockage); font-weight: 700;">0.5%</span>
-          </div>
-          <div class="progress-track">
-            <div id="prob-blockage-bar" class="progress-fill blockage" style="width: 0.5%;"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Triggered Alert History Log -->
-      <div style="margin-top: 0.5rem; border-top: 1px solid var(--border-color); padding-top: 0.8rem; flex: 1; display: flex; flex-direction: column;">
-        <div class="card-header" style="padding-bottom: 0.5rem; margin-bottom: 0.5rem; border: none;">
-          <h2>🚨 Event Audit Log</h2>
-          <span style="font-size: 0.7rem; color: var(--text-muted);">Auto-Debounced</span>
-        </div>
-        <div id="alert-log-list" class="alert-log-list">
-          <div class="alert-item">
-            <div class="alert-time">System Ready</div>
-            <div class="alert-msg">FlowSentinel Monitoring Active</div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-  </main>
-
-  <!-- JavaScript Modules -->
-  <script src="/static/js/websocket_client.js"></script>
-  <script src="/static/js/simulation_panel.js"></script>
-  <script src="/static/js/charts.js"></script>
-  <script src="/static/js/app.js"></script>
+  <!-- Core Scripts -->
+  <script src="js/navigation.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/state.js"></script>
+  <script src="js/websocket_client.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/app.js"></script>
 </body>
 </html>
-

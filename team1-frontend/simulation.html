@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FlowSentinel - Simulation Engine</title>
+  
+  <!-- CSS Stylesheets -->
+  <link rel="stylesheet" href="css/styles.css">
+  
+  <!-- Chart.js via CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+  <div id="app-root">
+    <!-- Shared Sidebar Container -->
+    <div id="sidebar-container"></div>
+
+    <!-- Main Content Area -->
+    <div class="fs-main-wrapper">
+      <!-- Shared Header Container -->
+      <div id="header-container"></div>
+
+      <!-- Main Simulation Viewport -->
+      <main class="fs-content">
+
+        <!-- 1. Top Simulation State & Controls Banner -->
+        <section class="card" style="border: 2px solid var(--fs-accent-cyan);">
+          <div class="card-header">
+            <h3>🎛️ Simulation Engine Master Controller</h3>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+              <span id="sim-status-pill" class="badge online">STATUS: RUNNING (25 FPS)</span>
+            </div>
+          </div>
+
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+            <div style="display: flex; gap: 0.6rem;">
+              <button id="btn-sim-start" class="btn btn-success">▶️ Start Simulation</button>
+              <button id="btn-sim-pause" class="btn btn-secondary">⏸️ Pause</button>
+              <button id="btn-sim-reset" class="btn btn-danger">🔄 Reset</button>
+            </div>
+
+            <!-- Predefined Scenarios -->
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+              <span style="font-size: 0.75rem; color: var(--fs-text-muted); font-weight: 700; text-transform: uppercase;">Predefined Scenarios:</span>
+              <button class="btn-preset active" data-preset="NORMAL_FLOW">🟢 Normal</button>
+              <button class="btn-preset" data-preset="RISING_BUILDUP">🟡 Buildup</button>
+              <button class="btn-preset" data-preset="DEVELOPING_BLOCKAGE">🟠 Developing</button>
+              <button class="btn-preset" data-preset="COMPLETE_BLOCKAGE">🔴 Critical Jam</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- 2. Simulation Modes & Fault Injection Grid -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem;">
+          
+          <!-- Simulation Modes -->
+          <section class="card">
+            <div class="card-header">
+              <h3>🎯 Selectable Simulation Modes</h3>
+              <span id="active-mode-label" class="badge" style="color: var(--fs-accent-cyan);">MODE: MANUAL SLIDERS</span>
+            </div>
+
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem;">
+              <button class="btn btn-secondary sim-mode-card active" data-mode="manual">
+                <div style="font-size: 1.2rem;">🖐️</div>
+                <div style="font-size: 0.8rem; font-weight: 700;">Manual Sliders</div>
+              </button>
+              <button class="btn btn-secondary sim-mode-card" data-mode="progressive">
+                <div style="font-size: 1.2rem;">📈</div>
+                <div style="font-size: 0.8rem; font-weight: 700;">Progressive Buildup</div>
+              </button>
+              <button class="btn btn-secondary sim-mode-card" data-mode="sudden">
+                <div style="font-size: 1.2rem;">💥</div>
+                <div style="font-size: 0.8rem; font-weight: 700;">Sudden Blockage</div>
+              </button>
+              <button class="btn btn-secondary sim-mode-card" data-mode="random">
+                <div style="font-size: 1.2rem;">🎲</div>
+                <div style="font-size: 0.8rem; font-weight: 700;">Random Noise</div>
+              </button>
+              <button class="btn btn-secondary sim-mode-card" data-mode="auto" style="grid-column: span 2;">
+                <div style="font-size: 1.2rem;">⚡</div>
+                <div style="font-size: 0.8rem; font-weight: 700;">Auto Physics Daemon (Backend Stream)</div>
+              </button>
+            </div>
+          </section>
+
+          <!-- Fault Injection -->
+          <section class="card">
+            <div class="card-header">
+              <h3>⚠️ Sensor Fault Injection</h3>
+              <span class="badge warning">STRESS TESTING</span>
+            </div>
+
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem;">
+              <button class="btn btn-secondary fault-btn" data-fault="dropout">
+                <span>🔌</span> Sensor Dropout (0 cm)
+              </button>
+              <button class="btn btn-secondary fault-btn" data-fault="stuck">
+                <span>🔒</span> Sensor Stuck Value
+              </button>
+              <button class="btn btn-secondary fault-btn" data-fault="spike">
+                <span>⚡</span> Vibration Spike (14.5 G)
+              </button>
+              <button class="btn btn-secondary fault-btn" data-fault="noise">
+                <span>📊</span> Gaussian Noise Injection
+              </button>
+            </div>
+          </section>
+        </div>
+
+        <!-- 3. Sliders & Simulation Outputs Split -->
+        <div style="display: grid; grid-template-columns: 360px 1fr; gap: 1.25rem;">
+          
+          <!-- Sliders & Physics Inputs -->
+          <section class="card">
+            <div class="card-header">
+              <h3>📐 Virtual Sensor Sliders</h3>
+              <span class="badge" style="font-size: 0.7rem;">40ms Debounce</span>
+            </div>
+
+            <div class="control-group">
+              <div class="control-label-row">
+                <span>Ultrasonic Clearance (Distance $d$)</span>
+                <span id="val-distance" class="control-value">52.0 cm</span>
+              </div>
+              <input type="range" id="slider-distance" min="2" max="120" step="1" value="52">
+            </div>
+
+            <div class="control-group">
+              <div class="control-label-row">
+                <span>HX711 Load Cell (Weight $W$)</span>
+                <span id="val-weight" class="control-value">320 kg</span>
+              </div>
+              <input type="range" id="slider-weight" min="0" max="1500" step="10" value="320">
+            </div>
+
+            <div class="control-group">
+              <div class="control-label-row">
+                <span>MPU6050 Vibration ($G$ RMS)</span>
+                <span id="val-vibration" class="control-value">3.40 G</span>
+              </div>
+              <input type="range" id="slider-vibration" min="0.0" max="15.0" step="0.1" value="3.4">
+            </div>
+
+            <div class="control-group">
+              <div class="control-label-row">
+                <span>Throughput Feed Rate</span>
+                <span id="val-flow" class="control-value">240 TPH</span>
+              </div>
+              <input type="range" id="slider-flow" min="0" max="500" step="10" value="240">
+            </div>
+
+            <!-- Chute Digital Twin Widget -->
+            <div style="border-top: 1px solid var(--fs-border-subtle); padding-top: 0.85rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                <span style="font-size: 0.8rem; font-weight: 700;">Chute Cross-Section</span>
+                <span id="sim-chute-bed-label" style="font-size: 0.75rem; color: var(--fs-accent-cyan);">Fill: 25%</span>
+              </div>
+              <div class="chute-twin-wrapper">
+                <div class="chute-graphic" style="width: 140px; height: 180px;">
+                  <div class="chute-sensor-marker">▲ ULTRASONIC</div>
+                  <div id="sim-chute-bed-level" class="chute-bed-level"></div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Simulation Output Metrics & Real-Time Curves -->
+          <section class="card" style="display: flex; flex-direction: column; gap: 1rem;">
+            <div class="card-header">
+              <h3>📊 Simulated ML Inference Response</h3>
+              <span id="sim-response-badge" class="badge normal">NORMAL (12.4 ms)</span>
+            </div>
+
+            <!-- Mini KPI row -->
+            <div class="kpi-grid" style="grid-template-columns: repeat(4, 1fr);">
+              <div class="kpi-card normal" id="sim-kpi-risk">
+                <div class="kpi-label">Simulated Risk</div>
+                <div id="sim-metric-risk" class="kpi-value" style="font-size: 1.5rem;">12.5%</div>
+              </div>
+              <div class="kpi-card normal">
+                <div class="kpi-label">Predicted State</div>
+                <div id="sim-metric-state" class="kpi-value" style="font-size: 1.25rem;">STATE 0</div>
+              </div>
+              <div class="kpi-card normal">
+                <div class="kpi-label">Anomaly Score</div>
+                <div id="sim-metric-anomaly" class="kpi-value" style="font-size: 1.25rem;">0.12</div>
+              </div>
+              <div class="kpi-card normal">
+                <div class="kpi-label">Motor Load</div>
+                <div id="sim-metric-current" class="kpi-value" style="font-size: 1.25rem;">42.5 A</div>
+              </div>
+            </div>
+
+            <!-- Real-time Chart -->
+            <div style="position: relative; height: 260px; width: 100%;">
+              <canvas id="telemetryChart"></canvas>
+            </div>
+          </section>
+        </div>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- Core Scripts -->
+  <script src="js/navigation.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/state.js"></script>
+  <script src="js/websocket_client.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/simulation_panel.js"></script>
+</body>
+</html>
+

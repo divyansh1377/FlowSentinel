@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FlowSentinel - Live Monitoring</title>
+  
+  <!-- CSS Stylesheets -->
+  <link rel="stylesheet" href="css/styles.css">
+  
+  <!-- Chart.js via CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+  <div id="app-root">
+    <!-- Shared Sidebar Container -->
+    <div id="sidebar-container"></div>
+
+    <!-- Main Content Area -->
+    <div class="fs-main-wrapper">
+      <!-- Shared Header Container -->
+      <div id="header-container"></div>
+
+      <!-- Main Monitoring Viewport -->
+      <main class="fs-content">
+
+        <!-- 1. Hardware Connection & Telemetry Status Panel -->
+        <section class="card">
+          <div class="card-header">
+            <h3>🔌 Hardware Gateway & ESP32 Telemetry Connection</h3>
+            <div id="esp-status-badge" class="badge online">
+              <span class="pulse-dot"></span>
+              <span id="esp-status-text">ESP32 CONNECTED</span>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr) auto; gap: 1rem; align-items: center;">
+            <div>
+              <div style="font-size: 0.72rem; color: var(--fs-text-muted); font-weight: 700; text-transform: uppercase;">Serial Port</div>
+              <div style="font-size: 0.95rem; font-weight: 700; font-family: var(--fs-font-mono); color: var(--fs-accent-cyan);">COM4 /ttyUSB0</div>
+            </div>
+
+            <div>
+              <div style="font-size: 0.72rem; color: var(--fs-text-muted); font-weight: 700; text-transform: uppercase;">Baud Rate</div>
+              <div style="font-size: 0.95rem; font-weight: 700; font-family: var(--fs-font-mono);">115200 bps</div>
+            </div>
+
+            <div>
+              <div style="font-size: 0.72rem; color: var(--fs-text-muted); font-weight: 700; text-transform: uppercase;">Packet Rate</div>
+              <div id="metric-packet-rate" style="font-size: 0.95rem; font-weight: 700; font-family: var(--fs-font-mono);">2.0 Hz (100% Stream)</div>
+            </div>
+
+            <div>
+              <div style="font-size: 0.72rem; color: var(--fs-text-muted); font-weight: 700; text-transform: uppercase;">Gateway Link</div>
+              <div style="font-size: 0.95rem; font-weight: 700; color: var(--fs-status-normal);">Direct WebSocket</div>
+            </div>
+
+            <div style="display: flex; gap: 0.5rem;">
+              <button id="btn-refresh-ports" class="btn btn-secondary">🔄 Refresh Ports</button>
+              <button id="btn-toggle-connect" class="btn btn-danger">Disconnect</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- 2. Dominant Blockage Risk Panel -->
+        <section class="card" style="border: 2px solid var(--fs-border-medium);">
+          <div class="card-header">
+            <h3>🎯 Dominant Blockage Risk Assessment</h3>
+            <span id="pred-state-badge" class="badge normal">STATE 0: NORMAL</span>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 280px 1fr; gap: 2rem; align-items: center;">
+            <!-- Dominant Risk Metric -->
+            <div style="display: flex; flex-direction: column; gap: 0.35rem; border-right: 1px solid var(--fs-border-subtle); padding-right: 1.5rem;">
+              <div style="font-size: 0.75rem; color: var(--fs-text-muted); text-transform: uppercase; font-weight: 700;">Instantaneous Risk</div>
+              <div id="mon-risk-value" style="font-size: 3rem; font-weight: 900; font-family: var(--fs-font-mono); color: var(--fs-status-normal); line-height: 1;">12.5%</div>
+              <div id="mon-risk-level-badge" class="badge normal" style="align-self: flex-start; margin-top: 0.5rem;">RISK: NORMAL</div>
+            </div>
+
+            <!-- Risk Diagnostics & AI Probabilities -->
+            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+              <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;">
+                <div>
+                  <div style="font-size: 0.7rem; color: var(--fs-text-muted); text-transform: uppercase;">Confidence</div>
+                  <div id="mon-confidence" style="font-size: 1.25rem; font-weight: 800; font-family: var(--fs-font-mono);">96.5%</div>
+                </div>
+                <div>
+                  <div style="font-size: 0.7rem; color: var(--fs-text-muted); text-transform: uppercase;">Anomaly Score</div>
+                  <div id="mon-anomaly" style="font-size: 1.25rem; font-weight: 800; font-family: var(--fs-font-mono); color: var(--fs-status-normal);">0.12 (NORMAL)</div>
+                </div>
+                <div>
+                  <div style="font-size: 0.7rem; color: var(--fs-text-muted); text-transform: uppercase;">Model Latency</div>
+                  <div id="mon-latency" style="font-size: 1.25rem; font-weight: 800; font-family: var(--fs-font-mono);">12.4 ms</div>
+                </div>
+              </div>
+
+              <!-- Mini probability distribution -->
+              <div style="display: flex; flex-direction: column; gap: 0.25rem; margin-top: 0.25rem;">
+                <div style="display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--fs-text-secondary);">
+                  <span>Classification Breakdown (Random Forest):</span>
+                  <span id="prob-breakdown-text">Normal: 96.5% | Warning: 3.0% | Blockage: 0.5%</span>
+                </div>
+                <div class="progress-track" style="height: 6px;">
+                  <div id="mon-prob-bar" class="progress-fill normal" style="width: 96.5%;"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 3. Sensor Cards Grid -->
+        <section class="sensor-grid">
+          <div class="sensor-card">
+            <div class="sensor-card-header">
+              <span class="sensor-title">📐 Ultrasonic Clearance</span>
+              <span class="badge normal">HEALTHY</span>
+            </div>
+            <div class="sensor-value-group">
+              <span id="mon-dist-val" class="sensor-value">52.0</span>
+              <span class="sensor-unit">cm</span>
+            </div>
+            <div class="sensor-meta-row">
+              <span id="mon-dist-trend">Trend: Stable</span>
+              <span id="mon-dist-time">Just now</span>
+            </div>
+          </div>
+
+          <div class="sensor-card">
+            <div class="sensor-card-header">
+              <span class="sensor-title">⚖️ Load Cell Burden</span>
+              <span class="badge normal">HEALTHY</span>
+            </div>
+            <div class="sensor-value-group">
+              <span id="mon-weight-val" class="sensor-value">320</span>
+              <span class="sensor-unit">kg</span>
+            </div>
+            <div class="sensor-meta-row">
+              <span id="mon-weight-trend">Trend: Equilibrium</span>
+              <span id="mon-weight-time">Just now</span>
+            </div>
+          </div>
+
+          <div class="sensor-card">
+            <div class="sensor-card-header">
+              <span class="sensor-title">📳 MPU6050 Vibration</span>
+              <span class="badge normal">HEALTHY</span>
+            </div>
+            <div class="sensor-value-group">
+              <span id="mon-vib-val" class="sensor-value">3.40</span>
+              <span class="sensor-unit">G</span>
+            </div>
+            <div class="sensor-meta-row">
+              <span id="mon-vib-trend">Impact: Dynamic</span>
+              <span id="mon-vib-time">Just now</span>
+            </div>
+          </div>
+
+          <div class="sensor-card">
+            <div class="sensor-card-header">
+              <span class="sensor-title">⚡ Conveyor Motor Current</span>
+              <span class="badge normal">HEALTHY</span>
+            </div>
+            <div class="sensor-value-group">
+              <span id="mon-current-val" class="sensor-value">42.5</span>
+              <span class="sensor-unit">A</span>
+            </div>
+            <div class="sensor-meta-row">
+              <span id="mon-current-trend">Torque: Nominal</span>
+              <span id="mon-current-time">Just now</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- 4. Real-Time Multi-Sensor Telemetry Charts -->
+        <section class="card">
+          <div class="card-header">
+            <h3>📈 Real-Time Multi-Sensor Telemetry Trends</h3>
+            <div class="card-header-actions">
+              <button id="btn-mon-pause" class="btn btn-secondary btn-icon" title="Pause Stream">⏸️</button>
+              <button id="btn-mon-clear" class="btn btn-secondary btn-icon" title="Clear Buffer">🗑️</button>
+            </div>
+          </div>
+          <div style="position: relative; height: 300px; width: 100%;">
+            <canvas id="telemetryChart"></canvas>
+          </div>
+        </section>
+
+        <!-- 5. Active Alerts & Incident Resolution Table -->
+        <section class="card">
+          <div class="card-header">
+            <h3>🚨 Active Alarms & Incident Resolution Dispatcher</h3>
+            <span class="badge" style="font-size: 0.7rem;">DEBOUNCED & HYSTERESIS GUARDED</span>
+          </div>
+
+          <div id="mon-alert-container" class="alert-log-list" style="max-height: 240px;">
+            <div class="alert-item normal">
+              <div class="alert-item-header">
+                <span>Monitoring Link Initialized</span>
+                <span>CHUTE_BF_01</span>
+              </div>
+              <div class="alert-item-title">Steady State Operation</div>
+              <div style="font-size: 0.75rem; color: var(--fs-text-secondary); display: flex; justify-content: space-between; align-items: center; margin-top: 0.35rem;">
+                <span>No active flow restrictions detected.</span>
+                <button class="btn btn-ghost" style="padding: 2px 8px; font-size: 0.7rem;">Acknowledge</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- Core Scripts -->
+  <script src="js/navigation.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/state.js"></script>
+  <script src="js/websocket_client.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/monitoring.js"></script>
+</body>
+</html>
+
