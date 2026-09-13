@@ -5,7 +5,10 @@ Pydantic Data Validation Schemas conforming strictly to API_CONTRACT.md.
 
 from typing import Dict, List, Optional, Any
 from pydantic import BaseModel, Field
-from datetime import datetime
+from datetime import datetime, timezone
+
+def current_utc_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 class SensorReadings(BaseModel):
     distance_cm: float = Field(..., ge=0.0, le=200.0, description="Ultrasonic sensor distance in cm")
@@ -25,7 +28,7 @@ class SimulationFlags(BaseModel):
     preset_scenario: Optional[str] = "CUSTOM"
 
 class TelemetryPayload(BaseModel):
-    timestamp: Optional[str] = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    timestamp: Optional[str] = Field(default_factory=current_utc_iso)
     chute_id: Optional[str] = "CHUTE_BLAST_FURNACE_01"
     sensors: SensorReadings
     operational: Optional[OperationalMetrics] = Field(default_factory=OperationalMetrics)
@@ -64,6 +67,16 @@ class AlertEvent(BaseModel):
     chute_id: str
     status_code: int
     acknowledged: bool = False
+
+class AlertAcknowledgeRequest(BaseModel):
+    acknowledged_by: Optional[str] = "operator"
+    notes: Optional[str] = None
+
+class AlertAcknowledgeResponse(BaseModel):
+    status: str
+    alert_id: str
+    acknowledged: bool
+    message: str
 
 class SystemStatusResponse(BaseModel):
     status: str
