@@ -294,7 +294,9 @@ async def websocket_telemetry_endpoint(websocket: WebSocket):
 
                 data = json.loads(raw_text)
                 msg_type = data.get("type")
-                payload = data.get("payload", {})
+                payload = data.get("payload", data.get("data", {}))
+                if not isinstance(payload, dict):
+                    payload = {}
 
                 if msg_type == "SIMULATION_UPDATE":
                     # Manual slider movement from frontend
@@ -325,12 +327,14 @@ async def websocket_telemetry_endpoint(websocket: WebSocket):
 
                 elif msg_type == "ACKNOWLEDGE_ALERT":
                     alert_id = payload.get("alert_id")
+                    ack_by = payload.get("acknowledged_by", "operator")
                     if alert_id:
                         alert_dispatcher.acknowledge_alert(alert_id)
                         await ws_hub.broadcast_json(
                             "ALERT_ACKNOWLEDGED",
                             {
                                 "alert_id": alert_id,
+                                "acknowledged_by": ack_by,
                                 "timestamp": datetime.now(timezone.utc).isoformat(),
                             },
                         )
