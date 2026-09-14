@@ -29,7 +29,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  // 3. Connect / Disconnect button mock
+  // 3. Connect / Disconnect button
   const btnToggleConnect = document.getElementById("btn-toggle-connect");
   let isHardwareConnected = true;
   if (btnToggleConnect) {
@@ -62,12 +62,22 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  // 4. State Subscriber
+  // 4. Pre-fetch historical alerts from REST API
+  try {
+    const alerts = await fsApi.getAlerts(15);
+    if (alerts && alerts.length > 0) {
+      alerts.forEach(a => fsState.addAlert(a));
+    }
+  } catch (e) {
+    console.warn("Could not pre-fetch alerts:", e);
+  }
+
+  // 5. State Subscriber
   fsState.subscribe((state) => {
     updateMonitoringUI(state);
   });
 
-  // 5. Connect WebSocket client
+  // 6. Connect WebSocket client
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   let host = window.location.host;
   if (!host || window.location.protocol === "file:") {
@@ -79,13 +89,19 @@ document.addEventListener("DOMContentLoaded", async () => {
     wsUrl,
     (msg) => {
       const msgType = msg.type;
-      const data = msg.data || msg.payload;
+      const data = msg.data !== undefined ? msg.data : msg.payload;
 
       if (msgType === "TELEMETRY_PREDICTION" && data) {
         fsState.updateFromPrediction(data);
       } else if (msgType === "CRITICAL_ALERT" && data) {
         fsState.addAlert(data);
         nav.playAlertBeep(920, 0.4);
+      } else if (msgType === "ALERT_ACKNOWLEDGED" && data) {
+        if (data.alert_id) {
+          fsState.acknowledgeAlert(data.alert_id, data.acknowledged_by);
+        }
+      } else if (msgType === "ALERTS_CLEARED") {
+        fsState.clearAlerts();
       }
     },
     (status) => {
@@ -95,6 +111,28 @@ document.addEventListener("DOMContentLoaded", async () => {
   );
 
   wsClient.connect();
+
+  // Global alert acknowledgment function
+  window.acknowledgeAlert = async function(alertId, btnEl) {
+    if (!alertId) return;
+    if (btnEl) {
+      btnEl.disabled = true;
+      btnEl.textContent = "ACKING...";
+    }
+
+    // 1. Send via WebSocket
+    wsClient.acknowledgeAlert(alertId, "operator");
+
+    // 2. Also send via REST API for persistence
+    try {
+      await fsApi.acknowledgeAlert(alertId, "operator");
+    } catch (e) {
+      console.warn("REST alert acknowledgment fallback warning:", e);
+    }
+
+    // 3. Update local state
+    fsState.acknowledgeAlert(alertId, "operator");
+  };
 
   function updateMonitoringUI(state) {
     const pred = state.prediction;
@@ -130,7 +168,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     if (monAnomaly) {
       const isAnom = pred.anomaly_detection?.is_anomaly;
-      monAnomaly.textContent = isAnom ? `0.88 (ANOMALY)` : `0.12 (NORMAL)`;
+      const score = pred.anomaly_detection?.anomaly_score !== undefined ? pred.anomaly_detection.anomaly_score.toFixed(2) : (isAnom ? "0.88" : "0.12");
+      monAnomaly.textContent = isAnom ? `${score} (ANOMALY)` : `${score} (NORMAL)`;
       monAnomaly.style.color = isAnom ? `var(--fs-status-anomaly)` : `var(--fs-status-normal)`;
     }
 
@@ -168,25 +207,32 @@ document.addEventListener("DOMContentLoaded", async () => {
       telem.motor_current_a || 40
     );
 
-    // Update Alerts Feed with Acknowledge functionality
+    // Update Alerts Feed with real Acknowledge functionality
     const alertCont = document.getElementById("mon-alert-container");
     if (alertCont && state.alerts.length > 0) {
-      alertCont.innerHTML = state.alerts.slice(0, 10).map((a, idx) => `
-        <div class="alert-item ${a.severity?.toLowerCase() || 'warning'}" id="alert-item-${idx}">
-          <div class="alert-item-header">
-            <span>${new Date(a.timestamp).toLocaleTimeString()}</span>
-            <span>${a.alert_id || 'ALT-01'}</span>
+      alertCont.innerHTML = state.alerts.slice(0, 10).map((a, idx) => {
+        const isAck = !!a.acknowledged;
+        const alertIdSafe = a.alert_id ? a.alert_id.replace(/'/g, "\\'") : `ALT-${idx}`;
+        return `
+          <div class="alert-item ${a.severity?.toLowerCase() || 'warning'} ${isAck ? 'acknowledged' : ''}" id="alert-item-${idx}" style="${isAck ? 'opacity: 0.55;' : ''}">
+            <div class="alert-item-header">
+              <span>${new Date(a.timestamp).toLocaleTimeString()}</span>
+              <span>${a.alert_id || 'ALT-01'} ${isAck ? '<span class="badge normal" style="font-size: 0.65rem; padding: 1px 5px;">ACKNOWLEDGED</span>' : ''}</span>
+            </div>
+            <div class="alert-item-title">${a.title || 'System Alert'}</div>
+            <div style="font-size: 0.75rem; color: var(--fs-text-secondary); display: flex; justify-content: space-between; align-items: center; margin-top: 0.35rem;">
+              <span>${a.message || ''}</span>
+              ${!isAck ? `
+                <button class="btn btn-ghost" onclick="window.acknowledgeAlert('${alertIdSafe}', this)" style="padding: 2px 8px; font-size: 0.7rem;">
+                  Acknowledge
+                </button>
+              ` : `
+                <span style="font-size: 0.7rem; color: var(--fs-status-normal); font-weight: 600;">✓ Acknowledged</span>
+              `}
+            </div>
           </div>
-          <div class="alert-item-title">${a.title || 'System Alert'}</div>
-          <div style="font-size: 0.75rem; color: var(--fs-text-secondary); display: flex; justify-content: space-between; align-items: center; margin-top: 0.35rem;">
-            <span>${a.message || ''}</span>
-            <button class="btn btn-ghost" onclick="this.closest('.alert-item').style.opacity='0.4'; this.textContent='ACKNOWLEDGED'; this.disabled=true;" style="padding: 2px 8px; font-size: 0.7rem;">
-              Acknowledge
-            </button>
-          </div>
-        </div>
-      `).join('');
+        `;
+      }).join('');
     }
   }
 });
-

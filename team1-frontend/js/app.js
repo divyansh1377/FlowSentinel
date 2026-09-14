@@ -56,13 +56,19 @@ document.addEventListener("DOMContentLoaded", async () => {
     wsUrl,
     (msg) => {
       const msgType = msg.type;
-      const data = msg.data || msg.payload;
+      const data = msg.data !== undefined ? msg.data : msg.payload;
 
       if (msgType === "TELEMETRY_PREDICTION" && data) {
         fsState.updateFromPrediction(data);
       } else if (msgType === "CRITICAL_ALERT" && data) {
         fsState.addAlert(data);
         nav.playAlertBeep(920, 0.4);
+      } else if (msgType === "ALERT_ACKNOWLEDGED" && data) {
+        if (data.alert_id) {
+          fsState.acknowledgeAlert(data.alert_id, data.acknowledged_by);
+        }
+      } else if (msgType === "ALERTS_CLEARED") {
+        fsState.clearAlerts();
       }
     },
     (status) => {
@@ -169,10 +175,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     const alertList = document.getElementById("alert-log-list");
     if (alertList && state.alerts.length > 0) {
       alertList.innerHTML = state.alerts.slice(0, 8).map(a => `
-        <div class="alert-item ${a.severity?.toLowerCase() || 'warning'}">
+        <div class="alert-item ${a.severity?.toLowerCase() || 'warning'} ${a.acknowledged ? 'acknowledged' : ''}">
           <div class="alert-item-header">
             <span>${new Date(a.timestamp).toLocaleTimeString()}</span>
-            <span>${a.alert_id || 'ALT-01'}</span>
+            <span>${a.alert_id || 'ALT-01'} ${a.acknowledged ? '✓ ACK' : ''}</span>
           </div>
           <div class="alert-item-title">${a.title || 'System Alert'}</div>
           <div style="font-size: 0.75rem; color: var(--fs-text-secondary);">${a.message || ''}</div>

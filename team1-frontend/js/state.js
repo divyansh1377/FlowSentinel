@@ -74,8 +74,46 @@ class FlowSentinelState {
   }
 
   addAlert(alert) {
-    this.alerts.unshift(alert);
-    if (this.alerts.length > 50) this.alerts.pop();
+    if (!alert) return;
+    
+    // Check if alert already exists in history
+    const existingIndex = this.alerts.findIndex(a => a.alert_id && alert.alert_id && a.alert_id === alert.alert_id);
+    if (existingIndex >= 0) {
+      // Update existing alert
+      this.alerts[existingIndex] = { ...this.alerts[existingIndex], ...alert };
+    } else {
+      this.alerts.unshift({
+        alert_id: alert.alert_id || `ALT-${Date.now()}`,
+        timestamp: alert.timestamp || new Date().toISOString(),
+        severity: alert.severity || "WARNING",
+        title: alert.title || "Chute Alert",
+        message: alert.message || "",
+        chute_id: alert.chute_id || "CHUTE_BLAST_FURNACE_01",
+        status_code: alert.status_code !== undefined ? alert.status_code : 1,
+        acknowledged: !!alert.acknowledged
+      });
+      if (this.alerts.length > 50) this.alerts.pop();
+    }
+    this.notify();
+  }
+
+  acknowledgeAlert(alertId, acknowledgedBy = "operator") {
+    let changed = false;
+    this.alerts = this.alerts.map(a => {
+      if (a.alert_id === alertId) {
+        changed = true;
+        return { ...a, acknowledged: true, acknowledged_by: acknowledgedBy };
+      }
+      return a;
+    });
+
+    if (changed) {
+      this.notify();
+    }
+  }
+
+  clearAlerts() {
+    this.alerts = [];
     this.notify();
   }
 
@@ -99,4 +137,3 @@ class FlowSentinelState {
 }
 
 const fsState = new FlowSentinelState();
-
