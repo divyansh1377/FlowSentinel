@@ -50,15 +50,17 @@ def test_e2e_scenarios_normal_to_blockage_to_recovery():
         # -----------------------------------------------------------------
         # Scenario A: Normal Flow
         # -----------------------------------------------------------------
-        ws.send_json({
-            "type": "SIMULATION_UPDATE",
-            "payload": {
-                "distance_cm": 52.0,
-                "weight_kg": 320.0,
-                "vibration_g": 3.4,
-                "material_flow_rate_tph": 240.0
+        ws.send_json(
+            {
+                "type": "SIMULATION_UPDATE",
+                "payload": {
+                    "distance_cm": 52.0,
+                    "weight_kg": 320.0,
+                    "vibration_g": 3.4,
+                    "material_flow_rate_tph": 240.0,
+                },
             }
-        })
+        )
         msg_a = ws.receive_json()
         assert msg_a["type"] == "TELEMETRY_PREDICTION"
         assert msg_a["data"]["status_code"] == 0
@@ -68,15 +70,17 @@ def test_e2e_scenarios_normal_to_blockage_to_recovery():
         # -----------------------------------------------------------------
         # Scenario B: Rising Buildup
         # -----------------------------------------------------------------
-        ws.send_json({
-            "type": "SIMULATION_UPDATE",
-            "payload": {
-                "distance_cm": 24.0,
-                "weight_kg": 680.0,
-                "vibration_g": 1.2,
-                "material_flow_rate_tph": 110.0
+        ws.send_json(
+            {
+                "type": "SIMULATION_UPDATE",
+                "payload": {
+                    "distance_cm": 24.0,
+                    "weight_kg": 680.0,
+                    "vibration_g": 1.2,
+                    "material_flow_rate_tph": 110.0,
+                },
             }
-        })
+        )
         frames_b = []
         for _ in range(2):
             frame = ws.receive_json()
@@ -90,15 +94,17 @@ def test_e2e_scenarios_normal_to_blockage_to_recovery():
         # -----------------------------------------------------------------
         # Scenario D: Complete Critical Blockage
         # -----------------------------------------------------------------
-        ws.send_json({
-            "type": "SIMULATION_UPDATE",
-            "payload": {
-                "distance_cm": 6.0,
-                "weight_kg": 1200.0,
-                "vibration_g": 0.15,
-                "material_flow_rate_tph": 0.0
+        ws.send_json(
+            {
+                "type": "SIMULATION_UPDATE",
+                "payload": {
+                    "distance_cm": 6.0,
+                    "weight_kg": 1200.0,
+                    "vibration_g": 0.15,
+                    "material_flow_rate_tph": 0.0,
+                },
             }
-        })
+        )
         frames_d = []
         for _ in range(2):
             frame = ws.receive_json()
@@ -120,15 +126,17 @@ def test_e2e_scenarios_normal_to_blockage_to_recovery():
         # -----------------------------------------------------------------
         # Send 3 normal frames to simulate flushing and recovery
         for _ in range(3):
-            ws.send_json({
-                "type": "SIMULATION_UPDATE",
-                "payload": {
-                    "distance_cm": 52.0,
-                    "weight_kg": 320.0,
-                    "vibration_g": 3.4,
-                    "material_flow_rate_tph": 240.0
+            ws.send_json(
+                {
+                    "type": "SIMULATION_UPDATE",
+                    "payload": {
+                        "distance_cm": 52.0,
+                        "weight_kg": 320.0,
+                        "vibration_g": 3.4,
+                        "material_flow_rate_tph": 240.0,
+                    },
                 }
-            })
+            )
             for _ in range(2):
                 f = ws.receive_json()
                 if f["type"] == "TELEMETRY_PREDICTION":
@@ -145,10 +153,13 @@ def test_alert_acknowledgment_websocket_bidirectional():
     with operator metadata and updates the server audit log.
     """
     # 1. Trigger an alert
-    resp = client.post("/api/telemetry", json={
-        "sensors": {"distance_cm": 5.0, "weight_kg": 1250.0, "vibration_g": 0.1},
-        "operational": {"material_flow_rate_tph": 0.0}
-    })
+    resp = client.post(
+        "/api/telemetry",
+        json={
+            "sensors": {"distance_cm": 5.0, "weight_kg": 1250.0, "vibration_g": 0.1},
+            "operational": {"material_flow_rate_tph": 0.0},
+        },
+    )
     assert resp.status_code == 200
 
     alerts = alert_dispatcher.get_history()
@@ -160,13 +171,15 @@ def test_alert_acknowledgment_websocket_bidirectional():
     with client.websocket_connect("/ws/telemetry") as ws:
         _ = ws.receive_json()  # Handshake
 
-        ws.send_json({
-            "type": "ACKNOWLEDGE_ALERT",
-            "payload": {
-                "alert_id": target_alert_id,
-                "acknowledged_by": "lead_engineer"
+        ws.send_json(
+            {
+                "type": "ACKNOWLEDGE_ALERT",
+                "payload": {
+                    "alert_id": target_alert_id,
+                    "acknowledged_by": "lead_engineer",
+                },
             }
-        })
+        )
 
         ack_event = ws.receive_json()
         assert ack_event["type"] == "ALERT_ACKNOWLEDGED"
@@ -175,7 +188,9 @@ def test_alert_acknowledgment_websocket_bidirectional():
 
     # Verify server state was updated
     updated_alerts = alert_dispatcher.get_history()
-    target_in_history = next(a for a in updated_alerts if a["alert_id"] == target_alert_id)
+    target_in_history = next(
+        a for a in updated_alerts if a["alert_id"] == target_alert_id
+    )
     assert target_in_history["acknowledged"] is True
 
 
@@ -185,9 +200,12 @@ def test_alert_acknowledgment_rest_broadcasts_to_websocket():
     to active WebSocket subscribers.
     """
     # Trigger alert
-    client.post("/api/telemetry", json={
-        "sensors": {"distance_cm": 4.5, "weight_kg": 1220.0, "vibration_g": 0.12}
-    })
+    client.post(
+        "/api/telemetry",
+        json={
+            "sensors": {"distance_cm": 4.5, "weight_kg": 1220.0, "vibration_g": 0.12}
+        },
+    )
     alerts = alert_dispatcher.get_history()
     target_id = alerts[0]["alert_id"]
 
@@ -195,7 +213,10 @@ def test_alert_acknowledgment_rest_broadcasts_to_websocket():
         _ = ws.receive_json()  # Handshake
 
         # Trigger REST acknowledgment
-        ack_res = client.post(f"/api/alerts/{target_id}/acknowledge", json={"acknowledged_by": "shift_operator"})
+        ack_res = client.post(
+            f"/api/alerts/{target_id}/acknowledge",
+            json={"acknowledged_by": "shift_operator"},
+        )
         assert ack_res.status_code == 200
         assert ack_res.json()["acknowledged"] is True
 
@@ -213,14 +234,16 @@ def test_simulation_mode_switch():
     with client.websocket_connect("/ws/telemetry") as ws:
         _ = ws.receive_json()  # Handshake
 
-        ws.send_json({
-            "type": "SET_SIMULATION_MODE",
-            "payload": {
-                "mode": "auto",
-                "preset": "RISING_BUILDUP",
-                "interval_ms": 400
+        ws.send_json(
+            {
+                "type": "SET_SIMULATION_MODE",
+                "payload": {
+                    "mode": "auto",
+                    "preset": "RISING_BUILDUP",
+                    "interval_ms": 400,
+                },
             }
-        })
+        )
 
         event = ws.receive_json()
         assert event["type"] == "SIMULATION_MODE_CHANGED"
