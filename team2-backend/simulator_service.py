@@ -13,12 +13,18 @@ import logging
 from datetime import datetime, timezone
 
 # Allow importing from team3-ml-simulation
-sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "team3-ml-simulation"))
+sys.path.append(
+    os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "team3-ml-simulation",
+    )
+)
 
 from data_generator import ChutePhysicsGenerator
 from websocket_manager import ws_hub
 
 logger = logging.getLogger("FlowSentinel.SimulatorService")
+
 
 class LiveSimulatorService:
     def __init__(self):
@@ -39,7 +45,9 @@ class LiveSimulatorService:
         self.mode = mode
         self.preset = preset
         self.interval_seconds = max(0.1, interval_ms / 1000.0)
-        logger.info(f"🔄 [SimulatorService] Mode set to: {self.mode} (Preset: {self.preset}, Interval: {self.interval_seconds}s)")
+        logger.info(
+            f"🔄 [SimulatorService] Mode set to: {self.mode} (Preset: {self.preset}, Interval: {self.interval_seconds}s)"
+        )
 
     async def start_loop(self):
         self.is_running = True
@@ -57,8 +65,10 @@ class LiveSimulatorService:
                     elif self.preset == "ERRATIC_SENSOR_SPIKE":
                         state_id = 3
 
-                    raw_sample = self.physics_generator.generate_sample(state=state_id, inject_noise=True)
-                    
+                    raw_sample = self.physics_generator.generate_sample(
+                        state=state_id, inject_noise=True
+                    )
+
                     # Run inference
                     prediction = self.predictor.predict(raw_sample)
                     prediction["timestamp"] = datetime.now(timezone.utc).isoformat()
@@ -66,7 +76,9 @@ class LiveSimulatorService:
 
                     # Evaluate alert
                     if self.alert_dispatcher:
-                        await self.alert_dispatcher.evaluate_prediction(prediction, "CHUTE_BLAST_FURNACE_01")
+                        await self.alert_dispatcher.evaluate_prediction(
+                            prediction, "CHUTE_BLAST_FURNACE_01"
+                        )
 
                     # Broadcast to UI
                     await ws_hub.broadcast_json("TELEMETRY_PREDICTION", prediction)
@@ -80,5 +92,6 @@ class LiveSimulatorService:
 
     def stop(self):
         self.is_running = False
+
 
 simulator_service = LiveSimulatorService()

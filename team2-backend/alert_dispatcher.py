@@ -16,8 +16,10 @@ from websocket_manager import ws_hub
 
 logger = logging.getLogger("FlowSentinel.AlertDispatcher")
 
+
 def get_utc_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
 
 class AlertDispatcher:
     def __init__(self, debounce_window_sec: float = 3.0):
@@ -28,13 +30,21 @@ class AlertDispatcher:
         self.alert_history: List[AlertEvent] = []
         self.max_history_len: int = 200
 
-    async def evaluate_prediction(self, prediction: Dict[str, Any], chute_id: str = "CHUTE_BLAST_FURNACE_01") -> Optional[AlertEvent]:
+    async def evaluate_prediction(
+        self, prediction: Dict[str, Any], chute_id: str = "CHUTE_BLAST_FURNACE_01"
+    ) -> Optional[AlertEvent]:
         now = time.time()
         status_code = prediction.get("status_code", 0)
         anomaly_dict = prediction.get("anomaly_detection", {})
-        is_anomaly = anomaly_dict.get("is_anomaly", False) if isinstance(anomaly_dict, dict) else False
+        is_anomaly = (
+            anomaly_dict.get("is_anomaly", False)
+            if isinstance(anomaly_dict, dict)
+            else False
+        )
         diagnosis = prediction.get("root_cause_analysis", "Unknown anomaly condition")
-        recommendation = prediction.get("recommended_action", "Inspect chute immediately.")
+        recommendation = prediction.get(
+            "recommended_action", "Inspect chute immediately."
+        )
 
         triggered_alert = None
 
@@ -58,7 +68,7 @@ class AlertDispatcher:
                         message=f"{diagnosis} Action: {recommendation}",
                         chute_id=chute_id,
                         status_code=status_code,
-                        acknowledged=False
+                        acknowledged=False,
                     )
                 elif status_code == 1:  # WARNING
                     triggered_alert = AlertEvent(
@@ -69,7 +79,7 @@ class AlertDispatcher:
                         message=f"{diagnosis} Action: {recommendation}",
                         chute_id=chute_id,
                         status_code=status_code,
-                        acknowledged=False
+                        acknowledged=False,
                     )
                 elif is_anomaly and status_code == 0:  # ANOMALY IN NORMAL STATE
                     triggered_alert = AlertEvent(
@@ -80,9 +90,12 @@ class AlertDispatcher:
                         message=f"{diagnosis} Action: {recommendation}",
                         chute_id=chute_id,
                         status_code=status_code,
-                        acknowledged=False
+                        acknowledged=False,
                     )
-                elif status_code == 0 and prev_state in (1, 2):  # RECOVERY BACK TO NORMAL
+                elif status_code == 0 and prev_state in (
+                    1,
+                    2,
+                ):  # RECOVERY BACK TO NORMAL
                     triggered_alert = AlertEvent(
                         alert_id=f"ALT-REC-{uuid.uuid4().hex[:6].upper()}",
                         timestamp=get_utc_iso(),
@@ -91,7 +104,7 @@ class AlertDispatcher:
                         message=f"Flow stabilized. Previous status: {prev_state}.",
                         chute_id=chute_id,
                         status_code=status_code,
-                        acknowledged=True
+                        acknowledged=True,
                     )
 
                 if triggered_alert:
@@ -100,8 +113,12 @@ class AlertDispatcher:
                         self.alert_history.pop()
 
                     # Broadcast alert immediately via WebSocket
-                    await ws_hub.broadcast_json("CRITICAL_ALERT", triggered_alert.model_dump())
-                    logger.warning(f"📢 [AlertDispatcher] Triggered: {triggered_alert.title} ({triggered_alert.alert_id})")
+                    await ws_hub.broadcast_json(
+                        "CRITICAL_ALERT", triggered_alert.model_dump()
+                    )
+                    logger.warning(
+                        f"📢 [AlertDispatcher] Triggered: {triggered_alert.title} ({triggered_alert.alert_id})"
+                    )
 
         return triggered_alert
 
@@ -119,5 +136,6 @@ class AlertDispatcher:
         self.alert_history.clear()
         self.current_state = 0
         self.last_state_change_time = 0.0
+
 
 alert_dispatcher = AlertDispatcher()
