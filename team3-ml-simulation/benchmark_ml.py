@@ -24,7 +24,9 @@ FEATURE_COLUMNS = ["distance_cm", "weight_kg", "vibration_g", "material_flow_rat
 REPORT_PATH = Path(__file__).with_name("EVALUATION_REPORT.md")
 
 
-def write_evaluation_report(metrics: dict, stress_passed: int, stress_total: int) -> None:
+def write_evaluation_report(
+    metrics: dict, stress_passed: int, stress_total: int
+) -> None:
     """Overwrite the checked-in report with metrics produced in this run."""
     generated_at = datetime.now(timezone.utc).isoformat()
     report = f"""# FlowSentinel ML Evaluation Report
@@ -64,8 +66,11 @@ hard CI gate: a failed stress check makes `benchmark_ml.py` exit with code 1.
 """
     REPORT_PATH.write_text(report, encoding="utf-8")
 
+
 def run_benchmarks(n_eval_samples: int = 2000):
-    print(f"📊 [Team 3 Benchmark] Running validation on {n_eval_samples} physics-simulated samples...")
+    print(
+        f"📊 [Team 3 Benchmark] Running validation on {n_eval_samples} physics-simulated samples..."
+    )
     generator = ChutePhysicsGenerator(seed=999)
     df = generator.generate_dataset(n_samples=n_eval_samples)
 
@@ -73,6 +78,7 @@ def run_benchmarks(n_eval_samples: int = 2000):
     if not predictor.is_loaded:
         print("⚠️ Models not trained yet! Training now...")
         from train_models import train_and_export_models
+
         train_and_export_models()
         predictor.load_models()
 
@@ -83,19 +89,19 @@ def run_benchmarks(n_eval_samples: int = 2000):
     total_anomalies = 0
 
     # ── Lists for per-class detailed metrics ─────────────────────────────────
-    y_true_class = []   # true labels for non-anomaly samples
+    y_true_class = []  # true labels for non-anomaly samples
     y_pred_class = []
 
     # ── IF false-positive tracking on known-normal samples ───────────────────
-    y_true_if = []      # 0=normal, 1=anomaly (ground truth from generator)
-    y_pred_if = []      # predicted by IF
+    y_true_if = []  # 0=normal, 1=anomaly (ground truth from generator)
+    y_pred_if = []  # predicted by IF
 
     for _, row in df.iterrows():
         sample = {
             "distance_cm": row["distance_cm"],
             "weight_kg": row["weight_kg"],
             "vibration_g": row["vibration_g"],
-            "material_flow_rate_tph": row["material_flow_rate_tph"]
+            "material_flow_rate_tph": row["material_flow_rate_tph"],
         }
 
         t0 = time.perf_counter()
@@ -115,35 +121,35 @@ def run_benchmarks(n_eval_samples: int = 2000):
         else:
             total_non_anomaly += 1
             pred_label = result["status_code"]
-            gt_label   = int(row["state_label"])
+            gt_label = int(row["state_label"])
             if pred_label == gt_label:
                 correct_class += 1
             y_true_class.append(gt_label)
             y_pred_class.append(pred_label)
 
     accuracy = (correct_class / total_non_anomaly) * 100 if total_non_anomaly > 0 else 0
-    anomaly_recall = (anomaly_detected / total_anomalies) * 100 if total_anomalies > 0 else 0
+    anomaly_recall = (
+        (anomaly_detected / total_anomalies) * 100 if total_anomalies > 0 else 0
+    )
 
     lat_mean = np.mean(latencies)
-    lat_p95  = np.percentile(latencies, 95)
-    lat_p99  = np.percentile(latencies, 99)
+    lat_p95 = np.percentile(latencies, 95)
+    lat_p99 = np.percentile(latencies, 99)
 
     # ── Per-class RF metrics ──────────────────────────────────────────────────
     y_true_arr = np.array(y_true_class)
     y_pred_arr = np.array(y_pred_class)
     prec, rec, f1, _ = precision_recall_fscore_support(
-        y_true_arr, y_pred_arr, average=None, labels=[0, 1, 2],
-        zero_division=0
+        y_true_arr, y_pred_arr, average=None, labels=[0, 1, 2], zero_division=0
     )
     prec_w, rec_w, f1_w, _ = precision_recall_fscore_support(
-        y_true_arr, y_pred_arr, average="weighted", labels=[0, 1, 2],
-        zero_division=0
+        y_true_arr, y_pred_arr, average="weighted", labels=[0, 1, 2], zero_division=0
     )
 
     # ── IF false-positive rate on normal (non-anomaly) samples ───────────────
     y_true_if_arr = np.array(y_true_if)
     y_pred_if_arr = np.array(y_pred_if)
-    normal_mask = (y_true_if_arr == 0)
+    normal_mask = y_true_if_arr == 0
     fp_count = np.sum((y_pred_if_arr[normal_mask] == 1))
     fpr = (fp_count / np.sum(normal_mask)) * 100 if np.sum(normal_mask) > 0 else 0.0
 
@@ -161,33 +167,41 @@ def run_benchmarks(n_eval_samples: int = 2000):
     print("📋 Random Forest Per-Class Metrics:")
     class_names = ["NORMAL", "WARNING", "BLOCKAGE"]
     for i, cls in enumerate(class_names):
-        print(f"   {cls:>10}: Precision={prec[i]:.4f}  Recall={rec[i]:.4f}  F1={f1[i]:.4f}")
-    print(f"   {'Weighted':>10}: Precision={prec_w:.4f}  Recall={rec_w:.4f}  F1={f1_w:.4f}")
+        print(
+            f"   {cls:>10}: Precision={prec[i]:.4f}  Recall={rec[i]:.4f}  F1={f1[i]:.4f}"
+        )
+    print(
+        f"   {'Weighted':>10}: Precision={prec_w:.4f}  Recall={rec_w:.4f}  F1={f1_w:.4f}"
+    )
     print("=" * 60)
     print("✅ Model meets sub-20ms industrial real-time requirements!\n")
 
     # Return structured dict for use by other scripts / report generation
     return {
-        "accuracy_pct":    round(accuracy, 2),
+        "accuracy_pct": round(accuracy, 2),
         "anomaly_recall_pct": round(anomaly_recall, 2),
-        "if_fpr_pct":      round(fpr, 2),
+        "if_fpr_pct": round(fpr, 2),
         "latency_mean_ms": round(lat_mean, 3),
-        "latency_p95_ms":  round(lat_p95, 3),
-        "latency_p99_ms":  round(lat_p99, 3),
+        "latency_p95_ms": round(lat_p95, 3),
+        "latency_p99_ms": round(lat_p99, 3),
         "per_class": {
-            cls: {"precision": round(float(prec[i]), 4),
-                  "recall": round(float(rec[i]), 4),
-                  "f1": round(float(f1[i]), 4)}
+            cls: {
+                "precision": round(float(prec[i]), 4),
+                "recall": round(float(rec[i]), 4),
+                "f1": round(float(f1[i]), 4),
+            }
             for i, cls in enumerate(class_names)
         },
-        "weighted": {"precision": round(float(prec_w), 4),
-                     "recall": round(float(rec_w), 4),
-                     "f1": round(float(f1_w), 4)},
+        "weighted": {
+            "precision": round(float(prec_w), 4),
+            "recall": round(float(rec_w), 4),
+            "f1": round(float(f1_w), 4),
+        },
     }
+
 
 if __name__ == "__main__":
     metrics = run_benchmarks()
     stress_passed, stress_total, stress_failures = run_phase3_suite()
     write_evaluation_report(metrics, stress_passed, stress_total)
     sys.exit(1 if stress_failures else 0)
-

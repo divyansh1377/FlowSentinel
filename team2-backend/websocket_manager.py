@@ -10,6 +10,7 @@ from fastapi import WebSocket
 
 logger = logging.getLogger("FlowSentinel.WebSocketHub")
 
+
 class WebSocketHub:
     """
     Manages active client connections and dispatches broadcast frames.
@@ -26,12 +27,16 @@ class WebSocketHub:
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.add(websocket)
-        logger.info(f"🔌 [WebSocketHub] Client connected. Total active: {len(self.active_connections)}")
+        logger.info(
+            f"🔌 [WebSocketHub] Client connected. Total active: {len(self.active_connections)}"
+        )
 
     def disconnect(self, websocket: WebSocket):
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
-            logger.info(f"🔌 [WebSocketHub] Client disconnected. Total active: {len(self.active_connections)}")
+            logger.info(
+                f"🔌 [WebSocketHub] Client disconnected. Total active: {len(self.active_connections)}"
+            )
 
     async def broadcast_json(self, message_type: str, data: Dict[str, Any]):
         """
@@ -41,10 +46,7 @@ class WebSocketHub:
         if not self.active_connections:
             return
 
-        payload = {
-            "type": message_type,
-            "data": data
-        }
+        payload = {"type": message_type, "data": data}
         text_data = json.dumps(payload)
 
         dead_connections = []
@@ -52,20 +54,22 @@ class WebSocketHub:
             try:
                 await connection.send_text(text_data)
             except Exception as e:
-                logger.warning(f"⚠️ [WebSocketHub] Failed to send to client, marking for cleanup: {e}")
+                logger.warning(
+                    f"⚠️ [WebSocketHub] Failed to send to client, marking for cleanup: {e}"
+                )
                 dead_connections.append(connection)
 
         for dead in dead_connections:
             self.disconnect(dead)
 
-    async def send_direct_json(self, websocket: WebSocket, message_type: str, data: Dict[str, Any]):
+    async def send_direct_json(
+        self, websocket: WebSocket, message_type: str, data: Dict[str, Any]
+    ):
         """
         Send direct reply to a specific websocket client.
         """
-        payload = {
-            "type": message_type,
-            "data": data
-        }
+        payload = {"type": message_type, "data": data}
         await websocket.send_text(json.dumps(payload))
+
 
 ws_hub = WebSocketHub()

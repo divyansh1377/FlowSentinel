@@ -18,24 +18,12 @@ import joblib
 import numpy as np
 from typing import Dict, Any, Optional, Tuple, List
 
-FEATURE_COLUMNS = [
-    "distance_cm",
-    "weight_kg",
-    "vibration_g",
-    "material_flow_rate_tph"
-]
+FEATURE_COLUMNS = ["distance_cm", "weight_kg", "vibration_g", "material_flow_rate_tph"]
 
-STATUS_COLORS = {
-    0: "GREEN",
-    1: "YELLOW",
-    2: "RED"
-}
+STATUS_COLORS = {0: "GREEN", 1: "YELLOW", 2: "RED"}
 
-STATUS_LABELS = {
-    0: "NORMAL",
-    1: "WARNING",
-    2: "BLOCKAGE"
-}
+STATUS_LABELS = {0: "NORMAL", 1: "WARNING", 2: "BLOCKAGE"}
+
 
 class ChutePredictor:
     """
@@ -44,7 +32,9 @@ class ChutePredictor:
 
     def __init__(self, models_dir: Optional[str] = None, buffer_size: int = 10):
         if models_dir is None:
-            models_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models")
+            models_dir = os.path.join(
+                os.path.dirname(os.path.abspath(__file__)), "models"
+            )
         self.models_dir = models_dir
         self.rf_model = None
         self.if_model = None
@@ -52,7 +42,7 @@ class ChutePredictor:
         self.metadata = None
         self.is_loaded = False
         self.if_decision_threshold = 0.0
-        
+
         # Pre-allocated feature buffer for zero-overhead NumPy allocation
         self._feature_buffer = np.zeros((1, 4), dtype=np.float64)
 
@@ -70,7 +60,11 @@ class ChutePredictor:
         scaler_path = os.path.join(self.models_dir, "scaler.joblib")
         meta_path = os.path.join(self.models_dir, "metadata.json")
 
-        if os.path.exists(rf_path) and os.path.exists(if_path) and os.path.exists(scaler_path):
+        if (
+            os.path.exists(rf_path)
+            and os.path.exists(if_path)
+            and os.path.exists(scaler_path)
+        ):
             try:
                 self.rf_model = joblib.load(rf_path)
                 self.if_model = joblib.load(if_path)
@@ -94,14 +88,20 @@ class ChutePredictor:
                         )
                     )
                 self.is_loaded = True
-                print("✅ [ChutePredictor] Optimized ML Models and Scaler successfully loaded.")
+                print(
+                    "✅ [ChutePredictor] Optimized ML Models and Scaler successfully loaded."
+                )
                 return True
             except Exception as e:
-                print(f"⚠️ [ChutePredictor] Error loading models: {e}. Falling back to heuristic mode.")
+                print(
+                    f"⚠️ [ChutePredictor] Error loading models: {e}. Falling back to heuristic mode."
+                )
                 self.is_loaded = False
                 return False
         else:
-            print("⚠️ [ChutePredictor] Serialized models not found. Running in heuristic fallback mode.")
+            print(
+                "⚠️ [ChutePredictor] Serialized models not found. Running in heuristic fallback mode."
+            )
             self.is_loaded = False
             return False
 
@@ -126,7 +126,12 @@ class ChutePredictor:
         # Compute temporal rates of change
         dw_dt, ddist_dt, vib_std = self._update_temporal_buffer(now, weight, dist, vib)
 
-        if self.is_loaded and self.rf_model and self.if_model and hasattr(self, "_mean"):
+        if (
+            self.is_loaded
+            and self.rf_model
+            and self.if_model
+            and hasattr(self, "_mean")
+        ):
             # Zero-overhead inline vector scaling
             features_scaled = (self._feature_buffer - self._mean) * self._scale_inv
 
@@ -135,8 +140,12 @@ class ChutePredictor:
             class_pred = int(np.argmax(probabilities))
             prob_dict = {
                 "normal": round(float(probabilities[0]), 4),
-                "warning": round(float(probabilities[1]) if len(probabilities) > 1 else 0.0, 4),
-                "blockage": round(float(probabilities[2]) if len(probabilities) > 2 else 0.0, 4),
+                "warning": round(
+                    float(probabilities[1]) if len(probabilities) > 1 else 0.0, 4
+                ),
+                "blockage": round(
+                    float(probabilities[2]) if len(probabilities) > 2 else 0.0, 4
+                ),
             }
             confidence = round(float(probabilities[class_pred]), 4)
 
@@ -168,16 +177,29 @@ class ChutePredictor:
                 prob_dict = {"normal": 0.95, "warning": 0.04, "blockage": 0.01}
                 confidence = 0.95
 
-            is_anomaly = True if (vib > 9.5 or (dist < 5.0 and weight < 50.0)) else False
+            is_anomaly = (
+                True if (vib > 9.5 or (dist < 5.0 and weight < 50.0)) else False
+            )
             anomaly_score = 0.85 if is_anomaly else 0.12
             raw_score = -0.75 if is_anomaly else 0.25
 
         # Calculate Composite Chute Health & Risk Index (0-100)
-        risk_score, health_state = self._compute_composite_risk(prob_dict, anomaly_score, dw_dt, dist)
+        risk_score, health_state = self._compute_composite_risk(
+            prob_dict, anomaly_score, dw_dt, dist
+        )
 
         # Advanced Industrial Diagnostics
         diag = self._generate_detailed_diagnosis(
-            class_pred, is_anomaly, dist, weight, vib, dw_dt, ddist_dt, vib_std, risk_score, health_state
+            class_pred,
+            is_anomaly,
+            dist,
+            weight,
+            vib,
+            dw_dt,
+            ddist_dt,
+            vib_std,
+            risk_score,
+            health_state,
         )
 
         latency_ms = round((time.perf_counter() - start_time) * 1000, 2)
@@ -191,7 +213,7 @@ class ChutePredictor:
             "anomaly_detection": {
                 "is_anomaly": is_anomaly,
                 "anomaly_score": anomaly_score,
-                "isolation_forest_raw": raw_score
+                "isolation_forest_raw": raw_score,
             },
             "root_cause_analysis": diag["root_cause_summary"],
             "recommended_action": diag["recommended_action"],
@@ -200,12 +222,14 @@ class ChutePredictor:
                 "distance_cm": dist,
                 "weight_kg": weight,
                 "vibration_g": vib,
-                "material_flow_rate_tph": flow
+                "material_flow_rate_tph": flow,
             },
-            "latency_ms": latency_ms
+            "latency_ms": latency_ms,
         }
 
-    def _update_temporal_buffer(self, t: float, weight: float, dist: float, vib: float) -> Tuple[float, float, float]:
+    def _update_temporal_buffer(
+        self, t: float, weight: float, dist: float, vib: float
+    ) -> Tuple[float, float, float]:
         """
         Appends reading and computes dW/dt, d(dist)/dt, and rolling vibration variance.
         """
@@ -251,7 +275,9 @@ class ChutePredictor:
         _, previous_weight, previous_dist, _ = self.history_buffer[-2]
         return previous_weight < 500.0 and previous_dist > 35.0
 
-    def _compute_composite_risk(self, probs: Dict[str, float], anomaly_score: float, dw_dt: float, dist: float) -> Tuple[float, str]:
+    def _compute_composite_risk(
+        self, probs: Dict[str, float], anomaly_score: float, dw_dt: float, dist: float
+    ) -> Tuple[float, str]:
         """
         Calculates a 0–100 Chute Risk Score fusing probabilities, anomaly scores, and temporal surge rates.
         """
@@ -271,7 +297,14 @@ class ChutePredictor:
         if dist < 20.0:
             fill_penalty = min(15.0, (20.0 - dist) * 1.0)
 
-        total_risk = round(float(np.clip(base_risk + anomaly_risk + surge_penalty + fill_penalty, 0.0, 100.0)), 1)
+        total_risk = round(
+            float(
+                np.clip(
+                    base_risk + anomaly_risk + surge_penalty + fill_penalty, 0.0, 100.0
+                )
+            ),
+            1,
+        )
 
         if total_risk >= 75.0:
             health_state = "CRITICAL_INTERVENTION_REQUIRED"
@@ -295,7 +328,7 @@ class ChutePredictor:
         ddist_dt: float,
         vib_std: float,
         risk_score: float,
-        health_state: str
+        health_state: str,
     ) -> Dict[str, Any]:
         """
         Pinpoints failure modes among 6 industrial root causes with mitigation recommendations.
@@ -364,7 +397,9 @@ class ChutePredictor:
                 cat = "ACCELERATING_BUILDUP"
                 sev = "ELEVATED"
                 evidence = f"Material mass increasing at +{dw_dt:.1f} kg/s with declining clearance ({ddist_dt:.1f} cm/s)."
-                action = "Throttle upstream feed by 35%; pulse auxiliary acoustic vibrators."
+                action = (
+                    "Throttle upstream feed by 35%; pulse auxiliary acoustic vibrators."
+                )
                 summary = "Accelerating material buildup detected. Rate of accumulation indicates impending jam."
             else:
                 cat = "TRANSIENT_RESTRICTION"
@@ -377,7 +412,7 @@ class ChutePredictor:
         elif is_anomaly:
             cat = "UNCLASSIFIED_SENSOR_ANOMALY"
             sev = "WARNING"
-            evidence = f"Out-of-distribution multi-sensor vector identified by Isolation Forest."
+            evidence = "Out-of-distribution multi-sensor vector identified by Isolation Forest."
             action = "Inspect local sensor junction box and signal cabling for RF interference."
             summary = "Out-of-distribution multi-sensor pattern identified by Isolation Forest."
 
@@ -385,8 +420,10 @@ class ChutePredictor:
         else:
             cat = "NORMAL_OPERATION"
             sev = "NOMINAL"
-            evidence = f"Clearance ({dist:.1f} cm), load ({weight:.1f} kg), and kinetic vibration ({vib:.2f} G) in dynamic balance."
-            action = "No intervention required. Maintain current continuous feed setpoint."
+            evidence = "Clearance ({dist:.1f} cm), load ({weight:.1f} kg), and kinetic vibration ({vib:.2f} G) in dynamic balance."
+            action = (
+                "No intervention required. Maintain current continuous feed setpoint."
+            )
             summary = "Dynamic equilibrium flow. Kinetic impact frequency and clearance within nominal bounds."
 
         return {
@@ -399,10 +436,10 @@ class ChutePredictor:
             "temporal_metrics": {
                 "dw_dt_kg_per_sec": dw_dt,
                 "ddist_dt_cm_per_sec": ddist_dt,
-                "vibration_variance": vib_std
+                "vibration_variance": vib_std,
             },
             "chute_health_index": {
                 "risk_score": risk_score,
-                "health_state": health_state
-            }
+                "health_state": health_state,
+            },
         }
