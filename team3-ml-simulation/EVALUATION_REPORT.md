@@ -1,6 +1,6 @@
 # FlowSentinel ML Evaluation Report
 
-Generated: `2026-09-14T06:11:20.500745+00:00`
+Generated: `2026-09-14T16:29:57.748823+00:00`
 
 ## Current validation results
 
@@ -9,9 +9,9 @@ Generated: `2026-09-14T06:11:20.500745+00:00`
 | Random Forest classification accuracy | 100.00% |
 | Isolation Forest anomaly recall | 100.00% |
 | Isolation Forest false-positive rate | 1.21% |
-| Mean inference latency | 11.518 ms |
-| P95 inference latency | 12.730 ms |
-| P99 inference latency | 13.558 ms |
+| Mean inference latency | 7.959 ms |
+| P95 inference latency | 8.789 ms |
+| P99 inference latency | 9.808 ms |
 | Phase 3 stress checks | 87/87 passed |
 
 ## Per-class Random Forest metrics

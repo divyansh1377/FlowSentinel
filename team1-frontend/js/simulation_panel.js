@@ -24,13 +24,19 @@ document.addEventListener("DOMContentLoaded", async () => {
     wsUrl,
     (msg) => {
       const msgType = msg.type;
-      const data = msg.data || msg.payload;
+      const data = msg.data !== undefined ? msg.data : msg.payload;
 
       if (msgType === "TELEMETRY_PREDICTION" && data) {
         fsState.updateFromPrediction(data);
       } else if (msgType === "CRITICAL_ALERT" && data) {
         fsState.addAlert(data);
         nav.playAlertBeep(920, 0.4);
+      } else if (msgType === "ALERT_ACKNOWLEDGED" && data) {
+        if (data.alert_id) {
+          fsState.acknowledgeAlert(data.alert_id, data.acknowledged_by);
+        }
+      } else if (msgType === "ALERTS_CLEARED") {
+        fsState.clearAlerts();
       }
     },
     (status) => {
@@ -63,9 +69,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       this.presets = {
         NORMAL_FLOW: { distance: 52.0, weight: 320.0, vibration: 3.4, flow: 240.0 },
-        RISING_BUILDUP: { distance: 28.0, weight: 620.0, vibration: 1.4, flow: 140.0 },
-        DEVELOPING_BLOCKAGE: { distance: 16.0, weight: 820.0, vibration: 0.65, flow: 60.0 },
-        COMPLETE_BLOCKAGE: { distance: 6.0, weight: 1180.0, vibration: 0.15, flow: 0.0 }
+        RISING_BUILDUP: { distance: 24.0, weight: 680.0, vibration: 1.2, flow: 110.0 },
+        DEVELOPING_BLOCKAGE: { distance: 14.0, weight: 880.0, vibration: 0.55, flow: 45.0 },
+        COMPLETE_BLOCKAGE: { distance: 6.5, weight: 1150.0, vibration: 0.18, flow: 0.0 },
+        EMPTY_CHUTE: { distance: 95.0, weight: 0.0, vibration: 0.08, flow: 0.0 },
+        ERRATIC_SENSOR_SPIKE: { distance: 50.0, weight: 310.0, vibration: 12.8, flow: 220.0 }
       };
 
       this.initEvents();
@@ -124,8 +132,11 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (btnStart) {
         btnStart.addEventListener("click", () => {
           this.isRunning = true;
-          document.getElementById("sim-status-pill").className = "badge online";
-          document.getElementById("sim-status-pill").textContent = "STATUS: RUNNING (25 FPS)";
+          const statusPill = document.getElementById("sim-status-pill");
+          if (statusPill) {
+            statusPill.className = "badge online";
+            statusPill.textContent = "STATUS: RUNNING";
+          }
           this.sendCurrentState();
         });
       }
@@ -134,15 +145,17 @@ document.addEventListener("DOMContentLoaded", async () => {
         btnPause.addEventListener("click", () => {
           this.isRunning = false;
           clearInterval(this.progressionInterval);
-          document.getElementById("sim-status-pill").className = "badge warning";
-          document.getElementById("sim-status-pill").textContent = "STATUS: PAUSED";
+          const statusPill = document.getElementById("sim-status-pill");
+          if (statusPill) {
+            statusPill.className = "badge warning";
+            statusPill.textContent = "STATUS: PAUSED";
+          }
         });
       }
 
       if (btnReset) {
         btnReset.addEventListener("click", () => {
-          this.applyPreset("NORMAL_FLOW");
-          fsCharts.clearHistory();
+          this.startRecoverySequence();
         });
       }
     }
@@ -152,17 +165,25 @@ document.addEventListener("DOMContentLoaded", async () => {
       this.activePreset = presetKey;
       const p = this.presets[presetKey];
 
-      this.distSlider.value = p.distance;
-      this.distVal.textContent = p.distance + " cm";
+      if (this.distSlider) {
+        this.distSlider.value = p.distance;
+        this.distVal.textContent = p.distance + " cm";
+      }
 
-      this.weightSlider.value = p.weight;
-      this.weightVal.textContent = p.weight + " kg";
+      if (this.weightSlider) {
+        this.weightSlider.value = p.weight;
+        this.weightVal.textContent = p.weight + " kg";
+      }
 
-      this.vibSlider.value = p.vibration;
-      this.vibVal.textContent = p.vibration + " G";
+      if (this.vibSlider) {
+        this.vibSlider.value = p.vibration;
+        this.vibVal.textContent = p.vibration + " G";
+      }
 
-      this.flowSlider.value = p.flow;
-      this.flowVal.textContent = p.flow + " TPH";
+      if (this.flowSlider) {
+        this.flowSlider.value = p.flow;
+        this.flowVal.textContent = p.flow + " TPH";
+      }
 
       document.querySelectorAll(".btn-preset").forEach(b => b.classList.remove("active"));
       const activeBtn = document.querySelector(`.btn-preset[data-preset="${presetKey}"]`);
@@ -198,19 +219,19 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     startProgressiveSimulation() {
-      let step = 0;
       this.applyPreset("NORMAL_FLOW");
 
       this.progressionInterval = setInterval(() => {
         if (!this.isRunning) return;
-        step++;
         let curDist = parseFloat(this.distSlider.value);
         let curWeight = parseFloat(this.weightSlider.value);
         let curVib = parseFloat(this.vibSlider.value);
+        let curFlow = parseFloat(this.flowSlider.value);
 
-        if (curDist > 8) curDist -= 1.5;
-        if (curWeight < 1150) curWeight += 28;
-        if (curVib > 0.2) curVib -= 0.08;
+        if (curDist > 7.0) curDist -= 1.8;
+        if (curWeight < 1150) curWeight += 35;
+        if (curVib > 0.2) curVib -= 0.12;
+        if (curFlow > 0) curFlow = Math.max(0, curFlow - 10);
 
         this.distSlider.value = curDist.toFixed(1);
         this.distVal.textContent = curDist.toFixed(1) + " cm";
@@ -218,13 +239,63 @@ document.addEventListener("DOMContentLoaded", async () => {
         this.weightVal.textContent = curWeight.toFixed(0) + " kg";
         this.vibSlider.value = curVib.toFixed(2);
         this.vibVal.textContent = curVib.toFixed(2) + " G";
+        this.flowSlider.value = curFlow.toFixed(0);
+        this.flowVal.textContent = curFlow.toFixed(0) + " TPH";
 
         this.sendCurrentState();
 
-        if (curDist <= 8 && curWeight >= 1150) {
+        if (curDist <= 7.0 && curWeight >= 1150) {
           clearInterval(this.progressionInterval);
         }
       }, 500);
+    }
+
+    startRecoverySequence() {
+      clearInterval(this.progressionInterval);
+      this.isRunning = true;
+      const statusPill = document.getElementById("sim-status-pill");
+      if (statusPill) {
+        statusPill.className = "badge online";
+        statusPill.textContent = "STATUS: RECOVERING → NORMAL";
+      }
+
+      const target = this.presets.NORMAL_FLOW;
+      let step = 0;
+      const totalSteps = 6;
+
+      const startDist = parseFloat(this.distSlider.value);
+      const startWeight = parseFloat(this.weightSlider.value);
+      const startVib = parseFloat(this.vibSlider.value);
+      const startFlow = parseFloat(this.flowSlider.value);
+
+      this.progressionInterval = setInterval(() => {
+        step++;
+        const alpha = step / totalSteps;
+
+        const curDist = startDist + (target.distance - startDist) * alpha;
+        const curWeight = startWeight + (target.weight - startWeight) * alpha;
+        const curVib = startVib + (target.vibration - startVib) * alpha;
+        const curFlow = startFlow + (target.flow - startFlow) * alpha;
+
+        this.distSlider.value = curDist.toFixed(1);
+        this.distVal.textContent = curDist.toFixed(1) + " cm";
+        this.weightSlider.value = curWeight.toFixed(0);
+        this.weightVal.textContent = curWeight.toFixed(0) + " kg";
+        this.vibSlider.value = curVib.toFixed(2);
+        this.vibVal.textContent = curVib.toFixed(2) + " G";
+        this.flowSlider.value = curFlow.toFixed(0);
+        this.flowVal.textContent = curFlow.toFixed(0) + " TPH";
+
+        this.sendCurrentState();
+
+        if (step >= totalSteps) {
+          clearInterval(this.progressionInterval);
+          this.applyPreset("NORMAL_FLOW");
+          if (statusPill) {
+            statusPill.textContent = "STATUS: NORMAL FLOW RESTORED";
+          }
+        }
+      }, 350);
     }
 
     startRandomNoiseSimulation() {
@@ -293,7 +364,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (stateEl) stateEl.textContent = `STATE ${pred.status_code}`;
     if (anomEl) {
       const isAnom = pred.anomaly_detection?.is_anomaly;
-      anomEl.textContent = isAnom ? "ANOMALY" : "NORMAL";
+      const score = pred.anomaly_detection?.anomaly_score !== undefined ? pred.anomaly_detection.anomaly_score.toFixed(2) : (isAnom ? "0.85" : "0.12");
+      anomEl.textContent = isAnom ? `ANOMALY (${score})` : `NORMAL (${score})`;
       anomEl.style.color = isAnom ? "var(--fs-status-anomaly)" : "var(--fs-status-normal)";
     }
     if (currentEl) currentEl.textContent = `${telem.motor_current_a?.toFixed(1) || 42.5} A`;
